@@ -14,10 +14,16 @@ FetchContent_MakeAvailable(SFML)
 
 add_executable(main
     src/main.cpp
+    src/GameEngine.cpp
+    src/AssetManager.cpp
+    src/Scene.cpp
     src/Component.cpp
     src/Entity.cpp
     src/EntityManager.cpp
 
+    include/GameEngine.h
+    include/AssetManager.h
+    include/Scene.h
     include/Component.h
     include/Entity.h
     include/EntityManager.h
