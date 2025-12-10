@@ -14,12 +14,19 @@ FetchContent_MakeAvailable(SFML)
 
 add_executable(main
     src/main.cpp
-    src/Component.h 
     src/Component.cpp
-    src/Entity.h
     src/Entity.cpp
-    src/EntityManager.h
     src/EntityManager.cpp
+
+    include/Component.h
+    include/Entity.h
+    include/EntityManager.h
+)
+
+add_custom_command(TARGET main POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/assets
+    $<TARGET_FILE_DIR:main>/assets
 )
 
 target_include_directories(main
