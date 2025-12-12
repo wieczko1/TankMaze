@@ -2,7 +2,7 @@
 #include <string>
 #include <map>
 #include <memory>
-#include "Component.h"
+#include "Components.h"
 
 class EntityManager;
 

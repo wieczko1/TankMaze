@@ -1,5 +1,37 @@
 #pragma once
-#include "Component.h"
+#include <string>
+
+#include "SFML/Graphics.hpp"
+
+class Component
+{
+public:
+    virtual ~Component() = default;
+    std::string name;
+
+protected:
+    Component(const std::string& n) : name(n) {}
+};
+
+class CTile : public Component
+{
+public:
+    enum class Type
+    {
+        NONE,
+        MAP_BORDER,
+        WALL,
+        WALKABLE
+    };
+
+    int id;
+    Type type;
+
+    CTile(int id, Type type)
+        : Component("Tile"), id(id), type(type)
+    {
+    }
+};
 
 class CVertexArray : public Component
 {
@@ -48,4 +80,3 @@ private:
     sf::VertexArray m_vertices{ sf::PrimitiveType::Triangles, 6 };
     std::string textureID;
 };
-

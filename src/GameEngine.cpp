@@ -21,7 +21,6 @@ void GameEngine::run()
 // 3. Initialize the Window
 void GameEngine::init()
 {
-    // Create a window (1280x720)
     m_window.create(sf::VideoMode({ 1280, 720 }), "Tank Maze");
     m_window.setFramerateLimit(60);
 }
@@ -29,31 +28,18 @@ void GameEngine::init()
 // 4. Input Processing
 void GameEngine::processInput()
 {
-    while (const std::optional event = m_window.pollEvent())
+    if (m_currentScene)
     {
-        if (event->is<sf::Event::Closed>())
-        {
-            m_window.close();
-        }
-
-        // Example: check for Escape key to close
-        if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
-        {
-            if (keyPressed->scancode == sf::Keyboard::Scancode::Escape)
-            {
-                m_window.close();
-            }
-        }
+        m_currentScene->sProcessInput();
     }
 }
 
 // 5. Update Game Logic
 void GameEngine::update()
 {
-    // TODO: Update current scene
     if (m_currentScene)
     {
-        // m_currentScene->update(); 
+        m_currentScene->sUpdate(1.f/60.f); 
     }
 }
 
@@ -62,10 +48,9 @@ void GameEngine::render()
 {
     m_window.clear();
 
-    // TODO: Draw current scene
     if (m_currentScene)
     {
-        // m_window.draw(*m_currentScene);
+        m_currentScene->sRender();
     }
 
     m_window.display();
