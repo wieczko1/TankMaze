@@ -4,7 +4,14 @@
 #include "GameEngine.h"
 #include "Components.h"
 #include <vector>
+#include <stack>
 #include <random>
+#include <algorithm>
+#include <iostream>
+#include <future> // Wymagane do std::async i std::future
+#include <chrono>
+
+using namespace std::chrono_literals;
 
 class SceneTest : public Scene
 {
@@ -21,20 +28,21 @@ public:
         while (const std::optional event = window.pollEvent())
         {
             if (event->is<sf::Event::Closed>())
-            {
                 window.close();
-            }
 
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>())
             {
                 if (keyPressed->scancode == sf::Keyboard::Scancode::Escape)
-                {
                     window.close();
-                }
 
-                if (keyPressed->scancode == sf::Keyboard::Scancode::P)
+                // R: Uruchom asynchroniczne generowanie (tylko jeœli nie trwa obecnie)
+                if (keyPressed->scancode == sf::Keyboard::Scancode::R)
                 {
-                    std::cout << "Pauza (test)" << std::endl;
+                    if (!m_isGenerating)
+                    {
+                        std::cout << "[ASYNC] Rozpoczynanie generowania w tle..." << std::endl;
+                        startAsyncGeneration();
+                    }
                 }
             }
         }
@@ -42,115 +50,199 @@ public:
 
     void sUpdate(float dt) override
     {
+        // Sprawdzamy stan zadania w tle
+        if (m_isGenerating)
+        {
+            // wait_for(0s) sprawdza status bez blokowania gry!
+            if (m_futureMapData.valid() && m_futureMapData.wait_for(0s) == std::future_status::ready)
+            {
+                std::cout << "[ASYNC] Generowanie zakonczone. Tworzenie swiata..." << std::endl;
+
+                // 1. Pobierz wynik z w¹tku
+                auto mapData = m_futureMapData.get();
+
+                // 2. Wyczyœæ stare dane (na g³ównym w¹tku)
+                m_entityManager = EntityManager();
+                m_masterVertexArray.clear();
+
+                // 3. Utwórz encje na podstawie danych (na g³ównym w¹tku)
+                createEntitiesFromData(mapData);
+
+                // 4. Zaktualizuj i zbuduj grafikê
+                m_entityManager.update();
+                assembleMap();
+
+                m_isGenerating = false;
+                std::cout << "[ASYNC] Gotowe!" << std::endl;
+            }
+        }
+
         m_entityManager.update();
+
+        // Opcjonalnie: animacja ³adowania
+        if (m_isGenerating)
+        {
+            m_loadingRotation += 360.0f * dt;
+        }
     }
 
     void sRender() override
     {
+        // Rysuj mapê
         m_engine->window().draw(m_masterVertexArray, &m_tilesetTexture);
+
+        // Jeœli generujemy, wyœwietl prosty symbol ³adowania (np. obracaj¹cy siê kwadrat)
+        if (m_isGenerating)
+        {
+            sf::RectangleShape loader({ 50.f, 50.f });
+            loader.setOrigin({ 25.f, 25.f });
+            loader.setPosition({ 1280 / 2.f, 720 / 2.f });
+            loader.setFillColor(sf::Color::Blue);
+            loader.setRotation(sf::degrees(m_loadingRotation));
+            m_engine->window().draw(loader);
+        }
     }
 
 private:
     EntityManager m_entityManager;
-    sf::VertexArray m_masterVertexArray; 
-    sf::Texture m_tilesetTexture;        
+    sf::VertexArray m_masterVertexArray;
+    sf::Texture m_tilesetTexture;
 
-    const int GRID_WIDTH = 10;
-    const int GRID_HEIGHT = 10;
-    const float TILE_SIZE = 64.0f;
+    // Zmienne do obs³ugi asynchronicznoœci
+    std::future<std::vector<CTile::Type>> m_futureMapData;
+    bool m_isGenerating = false;
+    float m_loadingRotation = 0.0f;
+
+    const int GRID_WIDTH = 21;
+    const int GRID_HEIGHT = 21;
+    const float TILE_SIZE = 32.0f;
 
     void init()
     {
-        // 1. Przygotuj teksturê (normalnie wczyta³byœ to przez AssetManager)
         createTestTexture();
-
-        // 2. Utwórz encje w systemie ECS
-        createTileEntities();
-
-        // 3. Zaktualizuj managera, aby encje trafi³y do odpowiednich kontenerów
-        m_entityManager.update();
-
-        // 4. Pobierz dane z encji i zbuduj jeden wielki VertexArray
-        assembleMap();
+        startAsyncGeneration(); // Pierwsze generowanie te¿ robimy async, a co!
     }
 
-    void createTileEntities()
+    void startAsyncGeneration()
     {
-        // Generator liczb losowych
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> distr(0, 1); // 0 = Walkable, 1 = Wall
+        m_isGenerating = true;
 
+        // std::async uruchamia lambdê w nowym w¹tku.
+        // Przekazujemy this->GRID_WIDTH itd. przez kopie lub referencje.
+        // WA¯NE: W¹tek nie mo¿e dotykaæ m_entityManager ani m_masterVertexArray!
+        m_futureMapData = std::async(std::launch::async, [this]()
+            {
+                // Symulacja ciê¿kiej pracy (opcjonalne, ¿ebyœ zobaczy³ efekt ³adowania)
+                // std::this_thread::sleep_for(1s); 
+
+                return generateMazeData(GRID_WIDTH, GRID_HEIGHT);
+            });
+    }
+
+    // Ta funkcja jest "czysta" - nie u¿ywa stanu klasy (poza argumentami), 
+    // wiêc jest bezpieczna dla w¹tków.
+    std::vector<CTile::Type> generateMazeData(int width, int height)
+    {
+        std::vector<CTile::Type> mapData(width * height, CTile::Type::WALL);
+
+        // Ustawianie granic
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                if (x == 0 || x == width - 1 || y == 0 || y == height - 1) {
+                    mapData[x + y * width] = CTile::Type::MAP_BORDER;
+                }
+            }
+        }
+
+        struct Point { int x, y; };
+        std::stack<Point> stack;
+        Point start = { 1, 1 };
+        mapData[start.x + start.y * width] = CTile::Type::WALKABLE;
+        stack.push(start);
+
+        // Ka¿dy w¹tek musi mieæ w³asny generator losowy
+        std::random_device rd;
+        std::mt19937 rng(rd());
+        const Point directions[] = { {0, -2}, {0, 2}, {-2, 0}, {2, 0} };
+
+        while (!stack.empty())
+        {
+            Point current = stack.top();
+            std::vector<int> neighbors;
+
+            for (int i = 0; i < 4; ++i)
+            {
+                int nx = current.x + directions[i].x;
+                int ny = current.y + directions[i].y;
+
+                if (nx > 0 && nx < width - 1 && ny > 0 && ny < height - 1)
+                {
+                    if (mapData[nx + ny * width] == CTile::Type::WALL)
+                    {
+                        neighbors.push_back(i);
+                    }
+                }
+            }
+
+            if (!neighbors.empty())
+            {
+                std::shuffle(neighbors.begin(), neighbors.end(), rng);
+                int dirIdx = neighbors[0];
+
+                Point next = { current.x + directions[dirIdx].x, current.y + directions[dirIdx].y };
+
+                mapData[next.x + next.y * width] = CTile::Type::WALKABLE;
+
+                Point wall = { current.x + directions[dirIdx].x / 2, current.y + directions[dirIdx].y / 2 };
+                mapData[wall.x + wall.y * width] = CTile::Type::WALKABLE;
+
+                stack.push(next);
+            }
+            else
+            {
+                stack.pop();
+            }
+        }
+        return mapData;
+    }
+
+    // Ta funkcja musi byæ wywo³ana na G£ÓWNYM w¹tku
+    void createEntitiesFromData(const std::vector<CTile::Type>& mapData)
+    {
         for (int x = 0; x < GRID_WIDTH; ++x)
         {
             for (int y = 0; y < GRID_HEIGHT; ++y)
             {
+                CTile::Type type = mapData[x + y * GRID_WIDTH];
+
                 auto entity = m_entityManager.createEntity("Tile");
-
-                CTile::Type type = CTile::Type::NONE;
-
-                // Logika doboru typu kafelka
-                if (x == 0 || x == GRID_WIDTH - 1 || y == 0 || y == GRID_HEIGHT - 1)
-                {
-                    type = CTile::Type::MAP_BORDER;
-                }
-                else
-                {
-                    type = (distr(gen) == 0) ? CTile::Type::WALKABLE : CTile::Type::WALL;
-                }
-
-                // Dodaj komponent logiczny
-                // ID obliczamy np. jako indeks w tablicy
                 entity->addComponent("CTile", std::make_shared<CTile>(x + y * GRID_WIDTH, type));
 
-                // Obliczanie wspó³rzêdnych tekstury (UV) w zale¿noœci od typu
-                // Zak³adam teksturê gdzie kafelki s¹ obok siebie po 32px
                 float tx = 0;
-                float ty = 0;
+                if (type == CTile::Type::MAP_BORDER) tx = 0.0f;
+                else if (type == CTile::Type::WALL)  tx = 32.0f;
+                else if (type == CTile::Type::WALKABLE) tx = 64.0f;
 
-                // Proste mapowanie typu na pozycjê w teksturze
-                if (type == CTile::Type::MAP_BORDER) tx = 0.0f;       // Czerwony
-                else if (type == CTile::Type::WALL)  tx = 32.0f;      // Szary
-                else if (type == CTile::Type::WALKABLE) tx = 64.0f;   // Zielony
-
-                // Dodaj komponent graficzny (lokalny VertexArray)
-                // Zak³adam, ¿e argument textureID to po prostu nazwa, tu "tileset"
                 entity->addComponent("CVertexArray", std::make_shared<CVertexArray>(
                     "CVertexArray",
-                    x * TILE_SIZE,      // World X
-                    y * TILE_SIZE,      // World Y
-                    tx, 0.0f,           // Texture X, Y
-                    TILE_SIZE, TILE_SIZE, // Width, Height (w œwiecie)
-                    "tileset"           // Texture ID
+                    x * TILE_SIZE, y * TILE_SIZE,
+                    tx, 0.0f,
+                    TILE_SIZE, TILE_SIZE,
+                    "tileset"
                 ));
 
-                // WA¯NE: W CVertexArray tex coords (width/height) powinny odpowiadaæ rozmiarowi
-                // na teksturze (np. 32x32), a nie rozmiarowi w œwiecie (64x64).
-                // Jeœli chcesz, aby tekstura by³a ostra (pixel art), musisz dopasowaæ te wartoœci.
-                // Tutaj dla uproszczenia przyj¹³em, ¿e skalujemy UV tak samo jak World size,
-                // ale w prawdziwej grze UV to zazwyczaj np. 32x32.
-                // Poni¿ej poprawka dla UV w komponencie:
                 auto vaComp = std::dynamic_pointer_cast<CVertexArray>(entity->getComponent("CVertexArray"));
-                if (vaComp)
-                {
-                    // Nadpisujê UV na mniejsze (32x32), ¿eby pasowa³o do mojej generowanej tekstury
-                    vaComp->setTextureCoords(tx, 0.0f, 32.0f, 32.0f);
-                }
+                if (vaComp) vaComp->setTextureCoords(tx, 0.0f, 32.0f, 32.0f);
             }
         }
     }
 
-    // KLUCZOWA FUNKCJA: £¹czenie wszystkiego w jeden draw call
     void assembleMap()
     {
-        // Ustaw typ prymitywu na Triangles
         m_masterVertexArray.setPrimitiveType(sf::PrimitiveType::Triangles);
-
-        // Zarezerwuj pamiêæ: 100 kafelków * 6 wierzcho³ków
         m_masterVertexArray.resize(GRID_WIDTH * GRID_HEIGHT * 6);
 
         auto& tiles = m_entityManager.getEntitiesByType("Tile");
-
         int currentVertexIndex = 0;
 
         for (auto& e : tiles)
@@ -159,8 +251,6 @@ private:
             if (vaComp)
             {
                 sf::VertexArray& localVA = vaComp->getVertexArray();
-
-                // Kopiujemy 6 wierzcho³ków z komponentu do g³ównej tablicy
                 for (size_t i = 0; i < localVA.getVertexCount(); ++i)
                 {
                     m_masterVertexArray[currentVertexIndex + i] = localVA[i];
@@ -170,22 +260,15 @@ private:
         }
     }
 
-    // Pomocnicza funkcja tworz¹ca teksturê w pamiêci (¿eby nie ³adowaæ pliku do testu)
     void createTestTexture()
     {
+        // Bez zmian (kod z poprzedniej odpowiedzi)
         sf::Image img;
-        img.resize({ 96, 32 }); // 3 kafelki po 32px
-
-        // 1. Border (Czerwony)
+        img.resize({ 96, 32 });
         for (int x = 0; x < 32; x++) for (int y = 0; y < 32; y++) img.setPixel({ static_cast<unsigned int>(x), static_cast<unsigned int>(y) }, sf::Color::Red);
-        // 2. Wall (Szary)
-        for (int x = 32; x < 64; x++) for (int y = 0; y < 32; y++) img.setPixel({ static_cast<unsigned int>(x), static_cast<unsigned int>(y) }, sf::Color(100, 100, 100));
-        // 3. Walkable (Zielony)
-        for (int x = 64; x < 96; x++) for (int y = 0; y < 32; y++) img.setPixel({ static_cast<unsigned int>(x), static_cast<unsigned int>(y) }, sf::Color::Green);
-
+        for (int x = 32; x < 64; x++) for (int y = 0; y < 32; y++) img.setPixel({ static_cast<unsigned int>(x), static_cast<unsigned int>(y) }, sf::Color::Black);
+        for (int x = 64; x < 96; x++) for (int y = 0; y < 32; y++) img.setPixel({ static_cast<unsigned int>(x), static_cast<unsigned int>(y) }, sf::Color(200, 200, 200));
         m_tilesetTexture.loadFromImage(img);
-
-        // Wa¿ne dla pixel artu / ostrych krawêdzi
         m_tilesetTexture.setSmooth(false);
     }
 };

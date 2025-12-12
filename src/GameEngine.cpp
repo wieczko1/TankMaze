@@ -21,7 +21,7 @@ void GameEngine::run()
 // 3. Initialize the Window
 void GameEngine::init()
 {
-    m_window.create(sf::VideoMode({ 1280, 720 }), "Tank Maze");
+    m_window.create(sf::VideoMode({ 672, 672 }), "Tank Maze");
     m_window.setFramerateLimit(60);
 }
 
