@@ -17,14 +17,15 @@ add_executable(main
     src/GameEngine.cpp
     src/AssetManager.cpp
     src/Scene.cpp
-    src/Component.cpp
+    src/TestScene.cpp
     src/Entity.cpp
     src/EntityManager.cpp
 
     include/GameEngine.h
     include/AssetManager.h
     include/Scene.h
-    include/Component.h
+    include/TestScene.h
+    include/Components.h
     include/Entity.h
     include/EntityManager.h
 )
