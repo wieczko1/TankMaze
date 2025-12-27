@@ -23,6 +23,7 @@ void GameEngine::init()
 {
     m_window.create(sf::VideoMode({ 672, 672 }), "Tank Maze");
     m_window.setFramerateLimit(60);
+    m_assets.loadAll();
 }
 
 // 4. Input Processing

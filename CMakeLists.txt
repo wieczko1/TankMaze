@@ -20,6 +20,9 @@ add_executable(main
     src/TestScene.cpp
     src/Entity.cpp
     src/EntityManager.cpp
+    src/TileMapManager.cpp 
+    src/TextureManager.cpp
+
 
     include/GameEngine.h
     include/AssetManager.h
@@ -28,7 +31,10 @@ add_executable(main
     include/Components.h
     include/Entity.h
     include/EntityManager.h
-)
+    include/TextureManager.h
+    include/TileMapManager.h
+
+ "include/TextureManager.h" "src/TextureManager.cpp" "include/TileMapManager.h" "src/TileMapManager.cpp")
 
 add_custom_command(TARGET main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

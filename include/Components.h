@@ -48,9 +48,13 @@ public:
 
     void setupQuad(float x, float y, float tx, float ty, float width, float height, std::string textureID)
     {
+        // Dodaj to, ¿eby wierzcho³ki nie by³y czarne/niewidzialne
+        for (size_t i = 0; i < 6; ++i) {
+            m_vertices[i].color = sf::Color::White;
+        }
+
         setPositionCoords(x, y, width, height);
         setTextureCoords(tx, ty, width, height);
-
         this->textureID = textureID;
     }
 

@@ -5,7 +5,7 @@
 #include <map>
 
 #include <SFML/Graphics.hpp>
-
+#include "TextureManager.h"
 #include "AssetManager.h"
 #include "Scene.h"
 
@@ -20,7 +20,7 @@ public:
     std::shared_ptr<Scene> getCurrentScene() { return m_currentScene; }
     AssetManager& assets() { return m_assets; }
     sf::RenderWindow& window() { return m_window; }
-
+    
 private:
     sf::RenderWindow m_window;
     AssetManager m_assets;
