@@ -20,7 +20,6 @@ public:
     void loadAll()
     {   
         //config.loadFromFile(SCENE_CONFIG_FILE);
-        textures.loadTexture("wall", "assets/graphics/wall.png");
         textures.loadTexture("tank", "assets/graphics/tank.png");
         textures.loadTexture("tileset", "assets/graphics/tileset.png");
         //fonts.loadFromFile("assets/sounds.txt");

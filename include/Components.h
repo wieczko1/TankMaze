@@ -48,7 +48,7 @@ public:
 
     void setupQuad(float x, float y, float tx, float ty, float width, float height, std::string textureID)
     {
-        // Dodaj to, ¿eby wierzcho³ki nie by³y czarne/niewidzialne
+        // KLUCZOWY DODATEK DLA SFML 3.0:
         for (size_t i = 0; i < 6; ++i) {
             m_vertices[i].color = sf::Color::White;
         }

@@ -33,8 +33,11 @@ add_executable(main
     include/EntityManager.h
     include/TextureManager.h
     include/TileMapManager.h
+)
 
- "include/TextureManager.h" "src/TextureManager.cpp" "include/TileMapManager.h" "src/TileMapManager.cpp")
+ if(MSVC)
+    set_target_properties(main PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()
 
 add_custom_command(TARGET main POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

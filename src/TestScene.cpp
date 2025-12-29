@@ -27,17 +27,15 @@ void SceneTest::startAsyncGeneration() {
 
 void SceneTest::sUpdate(float dt) {
     if (m_isGenerating) {
-        if (m_futureMapData.valid() && m_futureMapData.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (m_futureMapData.valid() && m_futureMapData.wait_for(0s) == std::future_status::ready) {
             auto mapData = m_futureMapData.get();
 
-            m_entityManager = EntityManager();
-            m_masterVertexArray.clear();
-
-            createEntitiesFromData(mapData);
-            assembleMap();
+            m_entityManager = EntityManager(); // 1. Czyœcimy stare
+            createEntitiesFromData(mapData);  
+            m_entityManager.update();
+            assembleMap();                    // 3. Budujemy VertexArray
 
             m_isGenerating = false;
-            std::cout << "[ASYNC] Mapa gotowa!" << std::endl;
         }
         m_loadingRotation += 360.0f * dt;
     }
@@ -127,7 +125,7 @@ void SceneTest::createEntitiesFromData(const std::vector<CTile::Type>& mapData) 
         for (int x = 0; x < GRID_WIDTH; ++x) {
             CTile::Type type = mapData[x + y * GRID_WIDTH];
             auto entity = m_entityManager.createEntity("Tile");
-
+            std::cout << "Tworze encje z danych o rozmiarze: " << mapData.size() << std::endl;
             float tx = (type == CTile::Type::MAP_BORDER) ? 0.0f :
                 (type == CTile::Type::WALL) ? 32.0f : 64.0f;
 
@@ -153,6 +151,7 @@ void SceneTest::assembleMap() {
     m_masterVertexArray.resize(GRID_WIDTH * GRID_HEIGHT * 6);
 
     auto& tiles = m_entityManager.getEntitiesByType("Tile");
+    std::cout << "Skladam mape z " << tiles.size() << " kafelkow." << std::endl; // Dodaj to!
     size_t vIdx = 0;
 
     for (auto& e : tiles) {
