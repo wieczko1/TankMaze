@@ -59,10 +59,20 @@ void SceneTest::sProcessInput() {
 void SceneTest::sRender() {
     auto& window = m_engine->window();
 
+   
     if (m_masterVertexArray.getVertexCount() > 0) {
         window.draw(m_masterVertexArray, &m_tilesetTexture);
+    } 
+    for (auto& e : m_entityManager.getEntitiesByType("Player")) {
+        if (e->hasComponent("CSprite")) {
+            auto& comp = e->getComponent<CSprite>("CSprite");
+            if (comp.sprite) {
+          window.draw(*comp.sprite);
+            }
+        }
     }
 
+    // 3. Rysowanie loadera (na samym wierzchu)
     if (m_isGenerating) {
         sf::RectangleShape loader({ 60.f, 60.f });
         loader.setOrigin({ 30.f, 30.f });

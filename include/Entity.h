@@ -27,7 +27,10 @@ public:
             return m_components[name];
         return nullptr;
     }
-
+    template <typename T>
+    T& getComponent(const std::string& name) {
+        return *std::static_pointer_cast<T>(m_components.at(name));
+    }
     bool hasComponent(const std::string& name) const
     {
         return m_components.count(name) > 0;

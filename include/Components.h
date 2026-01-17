@@ -8,9 +8,9 @@ class Component
 public:
     virtual ~Component() = default;
     std::string name;
-
-protected:
     Component(const std::string& n) : name(n) {}
+protected:
+    
 };
 
 class CTile : public Component
@@ -83,4 +83,40 @@ public:
 private:
     sf::VertexArray m_vertices{ sf::PrimitiveType::Triangles, 6 };
     std::string textureID;
+};
+class CTransform : public Component {
+public:
+    sf::Vector2f pos = { 0.f, 0.f };
+    sf::Vector2f velocity = { 0.f, 0.f };
+    float angle = 0.f;
+
+    // Poprawka: Dodano : Component("Transform")
+    CTransform(const sf::Vector2f& p, const sf::Vector2f& v, float a)
+        : Component("Transform"), pos(p), velocity(v), angle(a) {}
+};
+
+class CSprite : public Component {
+public:
+    std::unique_ptr<sf::Sprite> sprite;
+
+
+  
+    CSprite() : Component("Sprite"), sprite(nullptr) {}
+
+    CSprite(const sf::Texture& tex)
+        : Component("Sprite") { // Inicjalizacja tutaj!
+        sf::Vector2f size = sf::Vector2f(tex.getSize());
+        sprite->setOrigin(size / 2.f);
+    }
+};
+
+class CInput : public Component {
+public:
+    bool up = false;
+    bool down = false;
+    bool left = false;
+    bool right = false;
+
+    // Poprawka: Dodano : Component("Input")
+    CInput() : Component("Input") {}
 };
