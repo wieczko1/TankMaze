@@ -33,7 +33,7 @@ add_executable(main
     include/EntityManager.h
     include/TextureManager.h
     include/TileMapManager.h
-)
+ "include/ConfigManager.h")
 
  if(MSVC)
     set_target_properties(main PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

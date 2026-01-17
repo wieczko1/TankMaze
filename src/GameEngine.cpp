@@ -21,7 +21,10 @@ void GameEngine::run()
 // 3. Initialize the Window
 void GameEngine::init()
 {
-    m_window.create(sf::VideoMode({ 672, 672 }), "Tank Maze");
+    m_assets.loadAll();
+    int width = m_assets.config.getInt("WindowWidth");
+    int height = m_assets.config.getInt("WindowHeight");
+    m_window.create(sf::VideoMode({ (unsigned int)width, (unsigned int)height }), "Tank Maze");
     m_window.setFramerateLimit(60);
     m_assets.loadAll();
 }

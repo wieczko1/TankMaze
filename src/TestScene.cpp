@@ -7,7 +7,22 @@ SceneTest::SceneTest(GameEngine* engine) : Scene(engine) {
 }
 
 void SceneTest::init() {
-    // Poprawione: assets() zamiast getAssets()
+    
+    auto& cfg = m_engine->assets().config;
+
+    GRID_WIDTH = cfg.getInt("GridWidth");
+    GRID_HEIGHT = cfg.getInt("GridHeight");
+    TILE_SIZE = cfg.getFloat("TileSize");
+    speed = cfg.getFloat("PlayerSpeed");
+
+    std::cout << "--- TEST CONFIGU ---" << std::endl;
+    std::cout << "Szerokosc: " << GRID_WIDTH << std::endl;
+    std::cout << "Rozmiar kafelka: " << TILE_SIZE << std::endl;
+    std::cout << "Predkosc: " << speed << std::endl;
+    std::cout << "--------------------" << std::endl;
+
+    std::cout << "Inicjalizacja sceny z predkoscia gracza: " << speed << std::endl;
+
     m_engine->assets().textures.loadTexture("tileset", "assets/graphics/tileset.png");
     m_tilesetTexture = m_engine->assets().textures.getTexture("tileset");
 

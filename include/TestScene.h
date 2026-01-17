@@ -37,13 +37,17 @@ private:
     bool m_isGenerating = false;
     float m_loadingRotation = 0.0f;
 
+
+
     // Konfiguracja mapy
-    const int GRID_WIDTH = 25;
-    const int GRID_HEIGHT = 25;
-    const float TILE_SIZE = 32.0f;
+    int GRID_WIDTH;
+    int GRID_HEIGHT;
+    float TILE_SIZE;
+    float speed;
 
     // Metody wewnêtrzne
     void init();
+    void spawnPlayer();
     void startAsyncGeneration();
     std::vector<CTile::Type> generateMazeData(int width, int height);
     void createEntitiesFromData(const std::vector<CTile::Type>& mapData);
