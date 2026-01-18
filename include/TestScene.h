@@ -52,8 +52,8 @@ private:
     std::vector<CTile::Type> generateMazeData(int width, int height);
     void createEntitiesFromData(const std::vector<CTile::Type>& mapData);
     void assembleMap();
-
+    void sMovement(float dt);
     // Tu mo¿esz dopisaæ systemy w przysz³oœci
     void sCollision();
-    void sMovement(float dt);
+    
 };

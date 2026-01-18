@@ -54,7 +54,7 @@ void SceneTest::sUpdate(float dt) {
         }
         m_loadingRotation += 360.0f * dt;
     }
-
+    sMovement(dt);
     m_entityManager.update();
 }
 
@@ -134,6 +134,8 @@ std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
     return mapData;
 }
 
+
+
 void SceneTest::createEntitiesFromData(const std::vector<CTile::Type>& mapData) {
     for (int y = 0; y < GRID_HEIGHT; ++y) {
         for (int x = 0; x < GRID_WIDTH; ++x) {
@@ -175,6 +177,44 @@ void SceneTest::assembleMap() {
                 m_masterVertexArray[vIdx + i] = va->getVertexArray()[i];
             }
             vIdx += 6;
+        }
+    }
+}
+void SceneTest::sMovement(float dt) {
+    // 1. Pobieramy prêdkoœæ z configu (jeœli nazwa³eœ j¹ 'speed' w init)
+    // Jeœli m_playerSpeed jest nieustawione, u¿ywamy 200.0f jako zapas
+    float currentSpeed = (speed > 0.f) ? speed : 200.0f;
+
+    for (auto& e : m_entityManager.getEntitiesByType("Player")) {
+        auto& transform = e->getComponent<CTransform>("CTransform");
+        auto& input = e->getComponent<CInput>("CInput");
+
+        // Resetujemy prêdkoœæ
+        transform.velocity = { 0.f, 0.f };
+
+        // 2. Reagujemy na input (ustawiamy wektor prêdkoœci)
+        if (input.up)    transform.velocity.y = -currentSpeed;
+        if (input.down)  transform.velocity.y = currentSpeed;
+        if (input.left)  transform.velocity.x = -currentSpeed;
+        if (input.right) transform.velocity.x = currentSpeed;
+
+        // 3. Aktualizujemy pozycjê logiczn¹ (CTransform)
+        transform.pos += transform.velocity * dt;
+
+        // 4. Synchronizacja Grafiki (TO NAPRAWIA "BEZSENSOWNE MIEJSCE")
+        if (e->hasComponent("CSprite")) {
+            auto& spriteComp = e->getComponent<CSprite>("CSprite");
+            // Sprawdzamy czy wskaŸnik istnieje (SFML 3.0 unique_ptr)
+            if (spriteComp.sprite) {
+                // Przesuwamy obrazek tam, gdzie jest czo³g
+                spriteComp.sprite->setPosition(transform.pos);
+
+                // Opcjonalnie: Obracanie czo³gu w stronê jazdy
+                if (transform.velocity.y < 0) spriteComp.sprite->setRotation(sf::degrees(0));
+                if (transform.velocity.y > 0) spriteComp.sprite->setRotation(sf::degrees(180));
+                if (transform.velocity.x < 0) spriteComp.sprite->setRotation(sf::degrees(270));
+                if (transform.velocity.x > 0) spriteComp.sprite->setRotation(sf::degrees(90));
+            }
         }
     }
 }
