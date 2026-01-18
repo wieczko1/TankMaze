@@ -47,7 +47,7 @@ private:
 
     // Metody wewnêtrzne
     void init();
-    void spawnPlayer();
+    void spawnPlayers();
     void startAsyncGeneration();
     std::vector<CTile::Type> generateMazeData(int width, int height);
     void createEntitiesFromData(const std::vector<CTile::Type>& mapData);

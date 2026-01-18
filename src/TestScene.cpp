@@ -49,7 +49,7 @@ void SceneTest::sUpdate(float dt) {
             createEntitiesFromData(mapData);  
             m_entityManager.update();
             assembleMap();                    // 3. Budujemy VertexArray
-
+            spawnPlayers();
             m_isGenerating = false;
         }
         m_loadingRotation += 360.0f * dt;
@@ -58,18 +58,7 @@ void SceneTest::sUpdate(float dt) {
     m_entityManager.update();
 }
 
-void SceneTest::sProcessInput() {
-    auto& window = m_engine->window();
 
-    while (const std::optional event = window.pollEvent()) {
-        if (event->is<sf::Event::Closed>()) window.close();
-
-        if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-            if (keyPressed->scancode == sf::Keyboard::Scancode::Escape) window.close();
-            if (keyPressed->scancode == sf::Keyboard::Scancode::R) startAsyncGeneration();
-        }
-    }
-}
 
 void SceneTest::sRender() {
     auto& window = m_engine->window();
@@ -187,5 +176,82 @@ void SceneTest::assembleMap() {
             }
             vIdx += 6;
         }
+    }
+}
+void SceneTest::spawnPlayers() {
+    // --- GRACZ 1 (WSAD) ---
+    auto p1 = m_entityManager.createEntity("Player");
+
+    // Pozycja: Lewy Górny Róg (1, 1)
+    float startX1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
+    float startY1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
+
+    p1->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX1, startY1), sf::Vector2f(0.f, 0.f), 0.f));
+
+    // Wa¿ne: Kolizja jest nieco mniejsza ni¿ kafelek (np. 28x28 przy kafelku 32), ¿eby czo³g mieœci³ siê w korytarzach
+    p1->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE - 4.f, TILE_SIZE - 4.f)));
+
+    // Klawisze WSAD
+    p1->addComponent("CInput", std::make_shared<CInput>(
+        sf::Keyboard::Scancode::W, sf::Keyboard::Scancode::S,
+        sf::Keyboard::Scancode::A, sf::Keyboard::Scancode::D,
+        sf::Keyboard::Scancode::Space
+    ));
+
+    auto& tex = m_engine->assets().textures.getTexture("tank");
+    auto spriteComp1 = std::make_shared<CSprite>(tex);
+    spriteComp1->sprite->setColor(sf::Color::Red); // Kolorujemy czo³g
+    p1->addComponent("CSprite", spriteComp1);
+
+
+    // --- GRACZ 2 (Strza³ki) ---
+    auto p2 = m_entityManager.createEntity("Player");
+
+    // Pozycja: Prawy Dolny Róg (GRID_WIDTH - 2, GRID_HEIGHT - 2)
+    float startX2 = (GRID_WIDTH - 2) * TILE_SIZE + TILE_SIZE / 2.f;
+    float startY2 = (GRID_HEIGHT - 2) * TILE_SIZE + TILE_SIZE / 2.f;
+
+    p2->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX2, startY2), sf::Vector2f(0.f, 0.f), 0.f));
+    p2->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE - 4.f, TILE_SIZE - 4.f)));
+
+    // Klawisze Strza³ek
+    p2->addComponent("CInput", std::make_shared<CInput>(
+        sf::Keyboard::Scancode::Up, sf::Keyboard::Scancode::Down,
+        sf::Keyboard::Scancode::Left, sf::Keyboard::Scancode::Right,
+        sf::Keyboard::Scancode::RControl
+    ));
+
+    auto spriteComp2 = std::make_shared<CSprite>(tex);
+    spriteComp2->sprite->setColor(sf::Color::Blue);
+    p2->addComponent("CSprite", spriteComp2);
+
+    m_entityManager.update();
+}
+void SceneTest::sProcessInput() {
+    auto& window = m_engine->window();
+
+    while (const std::optional event = window.pollEvent()) {
+        if (event->is<sf::Event::Closed>()) window.close();
+
+        // Obs³uga klawiszy systemowych (ESC, R)
+        if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
+            if (keyPressed->scancode == sf::Keyboard::Scancode::Escape) window.close();
+            if (keyPressed->scancode == sf::Keyboard::Scancode::R) startAsyncGeneration();
+        }
+    }
+
+    // Ci¹g³e sprawdzanie stanu klawiatury dla ka¿dego gracza
+    for (auto& e : m_entityManager.getEntitiesByType("Player")) {
+        auto& input = e->getComponent<CInput>("CInput");
+
+        // Resetujemy stan
+        input.up = false; input.down = false; input.left = false; input.right = false; input.shoot = false;
+
+        // Sprawdzamy czy klawisze zdefiniowane w komponencie s¹ wciœniête
+        if (sf::Keyboard::isKeyPressed(input.kUp))    input.up = true;
+        if (sf::Keyboard::isKeyPressed(input.kDown))  input.down = true;
+        if (sf::Keyboard::isKeyPressed(input.kLeft))  input.left = true;
+        if (sf::Keyboard::isKeyPressed(input.kRight)) input.right = true;
+        if (sf::Keyboard::isKeyPressed(input.kShoot)) input.shoot = true;
     }
 }

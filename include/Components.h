@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-
+#include <memory>
 #include "SFML/Graphics.hpp"
 
 class Component
@@ -11,6 +11,16 @@ public:
     Component(const std::string& n) : name(n) {}
 protected:
     
+};
+
+
+
+class CBoundingBox : public Component {
+public:
+    sf::Vector2f size;
+    sf::Vector2f halfSize;
+
+    CBoundingBox(const sf::Vector2f& s) : Component("BoundingBox"), size(s), halfSize(s / 2.f) {}
 };
 
 class CTile : public Component
@@ -99,12 +109,14 @@ class CSprite : public Component {
 public:
     std::unique_ptr<sf::Sprite> sprite;
 
-
-  
     CSprite() : Component("Sprite"), sprite(nullptr) {}
 
     CSprite(const sf::Texture& tex)
-        : Component("Sprite") { // Inicjalizacja tutaj!
+        : Component("Sprite") {
+
+       
+        sprite = std::make_unique<sf::Sprite>(tex);
+
         sf::Vector2f size = sf::Vector2f(tex.getSize());
         sprite->setOrigin(size / 2.f);
     }
@@ -116,7 +128,24 @@ public:
     bool down = false;
     bool left = false;
     bool right = false;
+    bool shoot = false;
 
-    // Poprawka: Dodano : Component("Input")
+    // Konfiguracja klawiszy (Jaki to klawisz?)
+    // To s¹ te zmienne, których kompilator nie widzia³!
+    sf::Keyboard::Scancode kUp;
+    sf::Keyboard::Scancode kDown;
+    sf::Keyboard::Scancode kLeft;
+    sf::Keyboard::Scancode kRight;
+    sf::Keyboard::Scancode kShoot;
+
+    // Konstruktor domyœlny (na wszelki wypadek)
     CInput() : Component("Input") {}
+
+    // Konstruktor konfiguruj¹cy sterowanie
+    CInput(sf::Keyboard::Scancode u, sf::Keyboard::Scancode d,
+        sf::Keyboard::Scancode l, sf::Keyboard::Scancode r,
+        sf::Keyboard::Scancode s)
+        : Component("Input"), kUp(u), kDown(d), kLeft(l), kRight(r), kShoot(s)
+    {
+    }
 };

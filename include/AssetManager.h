@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include "TextureManager.h"
-//#include "FontManager.h"
+#include "FontManager.h"
 #include "TileMapManager.h"
 #include "ConfigManager.h"
 // i inne
@@ -13,8 +13,7 @@ public:
     TileMapManager tileMaps;
     ConfigManager config;
     AssetManager() :tileMaps(textures, 32.0f) {}
-    //ConfigManager config;
-    //FontManager fonts;
+    FontManager fonts;
     // i inne
 
     void loadAll()
@@ -22,7 +21,7 @@ public:
         config.loadFromFile("assets/config.txt");
         textures.loadTexture("tank", "assets/graphics/tank.png");
         textures.loadTexture("tileset", "assets/graphics/tileset.png");
-        //fonts.loadFromFile("assets/sounds.txt");
+        fonts.loadFont("main", "assets/fonts/font.ttf");
         // i inne
     }
 };
