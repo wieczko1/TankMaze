@@ -149,3 +149,25 @@ public:
     {
     }
 };
+
+class CBullet : public Component {
+public:
+    float lifetime = 10.0f; // Domyœlnie 10 sekund ¿ycia
+
+    CBullet() : Component("Bullet") {}
+};
+
+class CBurstWeapon : public Component {
+public:
+    int shotsFired = 0;          // Ile kulek wystrzelono w obecnej serii
+    float timeSinceLastShot = 0.f; // Czas od ostatniego strza³u w serii
+    float burstCooldown = 0.f;   // Czas do nastêpnej serii (5 sekund)
+    bool isBursting = false;     // Czy jesteœmy w trakcie strzelania serii?
+
+    // Konfiguracja
+    const int maxShots = 5;
+    const float fireRate = 0.1f; // 100ms miêdzy kulami
+    const float burstDelay = 3.0f; // 3 sekund przerwy miêdzy seriami
+
+    CBurstWeapon() : Component("BurstWeapon") {}
+};

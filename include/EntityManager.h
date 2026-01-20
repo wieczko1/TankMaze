@@ -32,7 +32,13 @@ public:
 
         m_entities.erase(
             std::remove_if(m_entities.begin(), m_entities.end(),
-                [](const std::shared_ptr<Entity>& e) { return !e->isAlive(); }),
+                [](const std::shared_ptr<Entity>& e) {
+                    if (!e->isAlive()) {
+                        std::cout << "[EntityManager] Removing entity ID " << e->id() << " (" << e->type() << ")\n";
+                        return true; 
+                    }
+                    return false; 
+                }),
             m_entities.end());
 
         for (auto& [type, list] : m_entityMap)

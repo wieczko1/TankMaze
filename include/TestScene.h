@@ -27,6 +27,8 @@ public:
     void sCollision(float dt);
     void sUpdate(float dt) override;
     void sRender() override;
+    void sWeapon(float dt);
+    void spawnBullet(std::shared_ptr<Entity> shooter);
 
 private:
     // Podstawowe systemy ECS i renderowania

@@ -38,6 +38,7 @@ void SceneTest::init() {
     std::cout << "Inicjalizacja sceny z predkoscia gracza: " << speed << std::endl;
 
     m_engine->assets().textures.loadTexture("tileset", "assets/graphics/tileset.png");
+    m_engine->assets().textures.loadTexture("ball", "assets/graphics/ball.png");
     m_tilesetTexture = m_engine->assets().textures.getTexture("tileset");
 
     startAsyncGeneration();
@@ -76,6 +77,7 @@ void SceneTest::sUpdate(float dt) {
 
     sMovement(dt); // Tylko ustawia prêdkoœæ
     sCollision(dt); // NOWOŒÆ: Sprawdza kolizje i przesuwa
+    sWeapon(dt);
 
     m_entityManager.update();
 }
@@ -83,18 +85,32 @@ void SceneTest::sUpdate(float dt) {
 void SceneTest::sRender() {
     auto& window = m_engine->window();
 
-   
+    // 1. Rysowanie mapy (t³o)
     if (m_masterVertexArray.getVertexCount() > 0) {
         window.draw(m_masterVertexArray, &m_tilesetTexture);
-    } 
+    }
+
+    // 2. Rysowanie Graczy
     for (auto& e : m_entityManager.getEntitiesByType("Player")) {
         if (e->hasComponent("CSprite")) {
             auto& comp = e->getComponent<CSprite>("CSprite");
             if (comp.sprite) {
-          window.draw(*comp.sprite);
+                window.draw(*comp.sprite);
             }
         }
     }
+
+    // --- NOWOŒÆ: Rysowanie Kulek ---
+    for (auto& e : m_entityManager.getEntitiesByType("Bullet")) {
+        if (e->hasComponent("CSprite")) {
+            // Pamiêtaj o kropce zamiast strza³ki przy getComponent!
+            auto& comp = e->getComponent<CSprite>("CSprite");
+            if (comp.sprite) {
+                window.draw(*comp.sprite);
+            }
+        }
+    }
+    // -------------------------------
 
     // 3. Rysowanie loadera (na samym wierzchu)
     if (m_isGenerating) {
@@ -278,68 +294,59 @@ void SceneTest::sMovement(float dt) {
 }
 
 void SceneTest::spawnPlayers() {
-    // Pobieramy teksturê raz
     auto& tex = m_engine->assets().textures.getTexture("tank");
-    sf::Vector2u texSize = tex.getSize(); // Pobieramy rozmiar obrazka (np. 64x64)
+    sf::Vector2u texSize = tex.getSize();
 
-    // --- GRACZ 1 (WSAD) ---
+    // --- GRACZ 1 ---
     auto p1 = m_entityManager.createEntity("Player");
+    // ... (Twoja konfiguracja Transform, BoundingBox, Input, Sprite bez zmian) ...
 
+    // START KOPIOWANIA (Reszta bez zmian)
     float startX1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
     float startY1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
 
     p1->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX1, startY1), sf::Vector2f(0.f, 0.f), 0.f));
-
-    // UWAGA: Skoro zmniejszasz czo³g, zmniejsz te¿ jego kolizjê!
-    // Jeœli czo³g ma byæ ma³y, a kolizja du¿a (TILE_SIZE), bêdziesz zahacza³ o niewidzialne œciany.
-    // Tutaj ustawi³em kolizjê na po³owê rozmiaru kafelka (dostosuj to do swoich potrzeb).
     p1->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE / 2.0f, TILE_SIZE / 2.0f)));
-
     p1->addComponent("CInput", std::make_shared<CInput>(
         sf::Keyboard::Scancode::W, sf::Keyboard::Scancode::S,
         sf::Keyboard::Scancode::A, sf::Keyboard::Scancode::D,
         sf::Keyboard::Scancode::Space
     ));
 
+    // --- NOWOŒÆ: Dodajemy broñ ---
+    p1->addComponent("CBurstWeapon", std::make_shared<CBurstWeapon>());
+    // -----------------------------
+
     auto spriteComp1 = std::make_shared<CSprite>(tex);
-
-    // 1. Ustawiamy œrodek obrotu/skalowania na œrodek obrazka
     spriteComp1->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
-
-    // 2. Skalujemy na 50% (0.5f)
     spriteComp1->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
-
-    // Opcjonalnie kolor
     spriteComp1->sprite->setColor(sf::Color(255, 0, 0));
-
     p1->addComponent("CSprite", spriteComp1);
 
 
-    // --- GRACZ 2 (Strza³ki) ---
+    // --- GRACZ 2 ---
     auto p2 = m_entityManager.createEntity("Player");
+    // ... (Transform, BoundingBox, Input bez zmian) ...
 
     float startX2 = (GRID_WIDTH - 2) * TILE_SIZE + TILE_SIZE / 2.f;
     float startY2 = (GRID_HEIGHT - 2) * TILE_SIZE + TILE_SIZE / 2.f;
 
     p2->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX2, startY2), sf::Vector2f(0.f, 0.f), 0.f));
-
-    // Zmniejszona kolizja dla gracza 2
     p2->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE / 2.0f, TILE_SIZE / 2.0f)));
-
     p2->addComponent("CInput", std::make_shared<CInput>(
         sf::Keyboard::Scancode::Up, sf::Keyboard::Scancode::Down,
         sf::Keyboard::Scancode::Left, sf::Keyboard::Scancode::Right,
         sf::Keyboard::Scancode::RControl
     ));
 
-    auto spriteComp2 = std::make_shared<CSprite>(tex);
+    // --- NOWOŒÆ: Dodajemy broñ ---
+    p2->addComponent("CBurstWeapon", std::make_shared<CBurstWeapon>());
+    // -----------------------------
 
-    // To samo dla gracza 2
+    auto spriteComp2 = std::make_shared<CSprite>(tex);
     spriteComp2->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
     spriteComp2->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
-
     spriteComp2->sprite->setColor(sf::Color(65, 105, 225));
-
     p2->addComponent("CSprite", spriteComp2);
 
     m_entityManager.update();
@@ -374,7 +381,6 @@ void SceneTest::sProcessInput() {
     }
 }
 
-// Pomocnicza funkcja (mo¿e byæ prywatn¹ metod¹ klasy), sprawdza czy pole jest solidne
 bool SceneTest::isSolid(int x, int y) {
     // 1. Zabezpieczenie przed wyjœciem poza tablicê
     if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return true;
@@ -458,6 +464,141 @@ void SceneTest::sCollision(float dt) {
                 // Jeœli Twój obrazek w pliku .png jest skierowany w GÓRÊ, a matematyka zak³ada 0 stopni = PRAWO,
                 // to musisz dodaæ +90 stopni do rotacji sprite'a, ¿eby siê zgadza³o.
                 // Spróbuj: transform.angle LUB transform.angle + 90.0f
+                spriteComp.sprite->setRotation(sf::degrees(transform.angle + 90.0f));
+            }
+        }
+    }
+}
+
+void SceneTest::spawnBullet(std::shared_ptr<Entity> shooter) {
+    auto& shooterTransform = shooter->getComponent<CTransform>("CTransform");
+
+    // Tworzymy kulê
+    auto bullet = m_entityManager.createEntity("Bullet");
+    bullet->addComponent("CBullet", std::make_shared<CBullet>());
+
+    // 1. Obliczamy pozycjê i prêdkoœæ
+    float bulletSpeed = 600.0f; // Szybkoœæ kuli
+
+    // Konwersja k¹ta gracza na radiany
+    float radians = shooterTransform.angle * (3.14159265f / 180.0f);
+
+    // Wektor prêdkoœci (taki sam jak kierunek patrzenia czo³gu)
+    sf::Vector2f velocity(std::cos(radians) * bulletSpeed, std::sin(radians) * bulletSpeed);
+
+    // Transform: Pozycja startowa to pozycja czo³gu, K¹t ten sam co czo³g
+    bullet->addComponent("CTransform", std::make_shared<CTransform>(shooterTransform.pos, velocity, shooterTransform.angle));
+
+    // BoundingBox dla kuli (ma³a, np. 10x10)
+    bullet->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(10.f, 10.f)));
+
+    // Sprite
+    auto& tex = m_engine->assets().textures.getTexture("ball");
+    auto spriteComp = std::make_shared<CSprite>(tex);
+
+    // Ustawiamy origin na œrodek kulki
+    sf::Vector2u texSize = tex.getSize();
+    spriteComp->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
+    // Skalujemy, jeœli kulka jest za du¿a
+    spriteComp->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
+
+    bullet->addComponent("CSprite", spriteComp);
+}
+
+void SceneTest::sWeapon(float dt) {
+    // 1. Logika strzelania (BEZ ZMIAN - skopiowane z poprzedniej wersji)
+    for (auto& e : m_entityManager.getEntitiesByType("Player")) {
+        if (!e->hasComponent("CBurstWeapon") || !e->hasComponent("CInput")) continue;
+
+        auto& weapon = e->getComponent<CBurstWeapon>("CBurstWeapon");
+        auto& input = e->getComponent<CInput>("CInput");
+
+        weapon.timeSinceLastShot += dt;
+
+        if (weapon.burstCooldown > 0) {
+            weapon.burstCooldown -= dt;
+            if (weapon.burstCooldown <= 0) {
+                weapon.shotsFired = 0;
+                weapon.burstCooldown = 0;
+                std::cout << "PRZELADOWANO! Gotowy do strzalu." << std::endl;
+            }
+        }
+        else if (input.shoot && weapon.shotsFired < weapon.maxShots && weapon.timeSinceLastShot >= weapon.fireRate) {
+            spawnBullet(e);
+            weapon.shotsFired++;
+            weapon.timeSinceLastShot = 0.f;
+
+            // Opcjonalnie: Logowanie
+            // int bulletsLeft = weapon.maxShots - weapon.shotsFired;
+            // std::cout << "Strzal! Zostalo kul: " << bulletsLeft << std::endl;
+
+            if (weapon.shotsFired >= weapon.maxShots) {
+                weapon.burstCooldown = weapon.burstDelay;
+                std::cout << "Pusty magazynek! Przeladowywanie (5s)..." << std::endl;
+            }
+        }
+    }
+
+    // 2. NOWA LOGIKA RUCHU I ODBIJANIA POCISKÓW
+    for (auto& e : m_entityManager.getEntitiesByType("Bullet")) {
+        auto& transform = e->getComponent<CTransform>("CTransform");
+        auto& bullet = e->getComponent<CBullet>("CBullet");
+
+        // A. Odliczanie czasu ¿ycia
+        bullet.lifetime -= dt;
+        if (bullet.lifetime <= 0) {
+            std::cout << "Kula zniknela ze starosci." << std::endl;
+            e->destroy();
+            continue; // Nie ma sensu liczyæ fizyki dla martwej kuli
+        }
+
+        // B. Fizyka Odbiæ (Rykoszet)
+        // Musimy sprawdziæ oœ X i oœ Y osobno, ¿eby wiedzieæ, od której œciany siê odbiliœmy.
+
+        // --- Sprawdzanie osi X ---
+        float nextX = transform.pos.x + transform.velocity.x * dt;
+        int gx = static_cast<int>(nextX / TILE_SIZE);
+        int gy = static_cast<int>(transform.pos.y / TILE_SIZE); // Y siê jeszcze nie zmieni³
+
+        // Jeœli nastêpny krok w X wchodzi w œcianê...
+        if (isSolid(gx, gy)) {
+            // ...to ODBIJAMY SIÊ (odwracamy prêdkoœæ X)
+            transform.velocity.x *= -1.0f;
+        }
+        else {
+            // ...w przeciwnym razie przesuwamy siê normalnie
+            transform.pos.x = nextX;
+        }
+
+        // --- Sprawdzanie osi Y ---
+        float nextY = transform.pos.y + transform.velocity.y * dt;
+        gx = static_cast<int>(transform.pos.x / TILE_SIZE); // X jest ju¿ zaktualizowany
+        gy = static_cast<int>(nextY / TILE_SIZE);
+
+        // Jeœli nastêpny krok w Y wchodzi w œcianê...
+        if (isSolid(gx, gy)) {
+            // ...to ODBIJAMY SIÊ (odwracamy prêdkoœæ Y)
+            transform.velocity.y *= -1.0f;
+        }
+        else {
+            transform.pos.y = nextY;
+        }
+
+        // C. Aktualizacja k¹ta obrotu (Grafika)
+        // Skoro kula mog³a zmieniæ kierunek lotu, musimy zaktualizowaæ jej k¹t (transform.angle),
+        // ¿eby Sprite obróci³ siê w stronê nowego lotu.
+
+        // atan2 zwraca k¹t w radianach na podstawie wektora (y, x)
+        float angleRad = std::atan2(transform.velocity.y, transform.velocity.x);
+        transform.angle = angleRad * (180.0f / 3.14159265f); // Zamiana na stopnie
+
+
+        // D. Synchronizacja Sprite'a
+        if (e->hasComponent("CSprite")) {
+            auto& spriteComp = e->getComponent<CSprite>("CSprite");
+            if (spriteComp.sprite) {
+                spriteComp.sprite->setPosition(transform.pos);
+                // +90 stopni korekty, bo Twoja tekstura pewnie patrzy w górê, a matematyka zak³ada w prawo
                 spriteComp.sprite->setRotation(sf::degrees(transform.angle + 90.0f));
             }
         }
