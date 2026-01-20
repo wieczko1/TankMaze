@@ -7,11 +7,25 @@ SceneTest::SceneTest(GameEngine* engine) : Scene(engine) {
 }
 
 void SceneTest::init() {
-    
+
     auto& cfg = m_engine->assets().config;
 
     GRID_WIDTH = cfg.getInt("GridWidth");
     GRID_HEIGHT = cfg.getInt("GridHeight");
+
+    // --- POPRAWKA: WYMUSZENIE LICZB NIEPARZYSTYCH ---
+    // Algorytm labiryntu wymaga nieparzystych wymiarów, aby dojœæ do samej krawêdzi.
+    // Jeœli w configu jest liczba parzysta (np. 20), zmieniamy j¹ na 21.
+    if (GRID_WIDTH % 2 == 0) {
+        GRID_WIDTH += 1;
+        std::cout << "[INFO] Skorygowano szerokosc mapy na nieparzysta: " << GRID_WIDTH << std::endl;
+    }
+    if (GRID_HEIGHT % 2 == 0) {
+        GRID_HEIGHT += 1;
+        std::cout << "[INFO] Skorygowano wysokosc mapy na nieparzysta: " << GRID_HEIGHT << std::endl;
+    }
+    // ------------------------------------------------
+
     TILE_SIZE = cfg.getFloat("TileSize");
     speed = cfg.getFloat("PlayerSpeed");
 
@@ -43,22 +57,28 @@ void SceneTest::startAsyncGeneration() {
 void SceneTest::sUpdate(float dt) {
     if (m_isGenerating) {
         if (m_futureMapData.valid() && m_futureMapData.wait_for(0s) == std::future_status::ready) {
+            // Pobieramy dane
             auto mapData = m_futureMapData.get();
 
-            m_entityManager = EntityManager(); // 1. Czyœcimy stare
-            createEntitiesFromData(mapData);  
+            // --- NOWOŒÆ: Zapisujemy mapê do zmiennej klasy dla kolizji ---
+            m_gridMap = mapData;
+            // -------------------------------------------------------------
+
+            m_entityManager = EntityManager();
+            createEntitiesFromData(mapData);
             m_entityManager.update();
-            assembleMap();                    // 3. Budujemy VertexArray
+            assembleMap();
             spawnPlayers();
             m_isGenerating = false;
         }
         m_loadingRotation += 360.0f * dt;
     }
-    sMovement(dt);
+
+    sMovement(dt); // Tylko ustawia prêdkoœæ
+    sCollision(dt); // NOWOŒÆ: Sprawdza kolizje i przesuwa
+
     m_entityManager.update();
 }
-
-
 
 void SceneTest::sRender() {
     auto& window = m_engine->window();
@@ -88,8 +108,10 @@ void SceneTest::sRender() {
 }
 
 std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
+    // 1. Wype³nij wszystko œcianami
     std::vector<CTile::Type> mapData(width * height, CTile::Type::WALL);
 
+    // Ustaw granice mapy (nieruszalne)
     for (int x = 0; x < width; ++x) {
         for (int y = 0; y < height; ++y) {
             if (x == 0 || x == width - 1 || y == 0 || y == height - 1)
@@ -97,8 +119,11 @@ std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
         }
     }
 
+    // 2. ALGORYTM GENEROWANIA (DFS) - to zostaje bez zmian
     struct Point { int x, y; };
     std::stack<Point> stack;
+
+    // Startujemy standardowo
     stack.push({ 1, 1 });
     mapData[1 + 1 * width] = CTile::Type::WALKABLE;
 
@@ -112,6 +137,7 @@ std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
 
         for (int i = 0; i < 4; ++i) {
             int nx = curr.x + dirs[i].x, ny = curr.y + dirs[i].y;
+            // Sprawdzamy zakres (z marginesem na œciany graniczne)
             if (nx > 0 && nx < width - 1 && ny > 0 && ny < height - 1) {
                 if (mapData[nx + ny * width] == CTile::Type::WALL) neighbors.push_back(i);
             }
@@ -131,32 +157,58 @@ std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
             stack.pop();
         }
     }
+
+    // 3. NOWOŒÆ: WYCINANIE PUSTEGO PLACU NA ŒRODKU (1/3 wielkoœci mapy)
+    int roomWidth = width / 3;
+    int roomHeight = height / 3;
+
+    // Oblicz lewy górny róg placu, ¿eby by³ wyœrodkowany
+    int startX = (width - roomWidth) / 2;
+    int startY = (height - roomHeight) / 2;
+
+    for (int x = startX; x < startX + roomWidth; ++x) {
+        for (int y = startY; y < startY + roomHeight; ++y) {
+            // Zabezpieczenie, ¿eby nie nadpisaæ MAP_BORDER (granic mapy)
+            if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
+                mapData[x + y * width] = CTile::Type::WALKABLE;
+            }
+        }
+    }
+
     return mapData;
 }
 
-
-
 void SceneTest::createEntitiesFromData(const std::vector<CTile::Type>& mapData) {
+    // 1. Definiujemy, ¿e kafelek W PLIKU GRAFICZNYM ma 64 piksele
+    const float TEXTURE_TILE_SIZE = 64.0f;
+
     for (int y = 0; y < GRID_HEIGHT; ++y) {
         for (int x = 0; x < GRID_WIDTH; ++x) {
             CTile::Type type = mapData[x + y * GRID_WIDTH];
             auto entity = m_entityManager.createEntity("Tile");
-            std::cout << "Tworze encje z danych o rozmiarze: " << mapData.size() << std::endl;
+
+            // 2. Obliczamy pozycjê X na teksturze (tx)
+            // 0 * 64 = 0
+            // 1 * 64 = 64
+            // 2 * 64 = 128
             float tx = (type == CTile::Type::MAP_BORDER) ? 0.0f :
-                (type == CTile::Type::WALL) ? 32.0f : 64.0f;
+                (type == CTile::Type::WALL) ? 64.0f : 128.0f;
 
             entity->addComponent("CTile", std::make_shared<CTile>(x + y * GRID_WIDTH, type));
 
-            // POPRAWIONE WYWO£ANIE (8 argumentów):
+            // 3. Tworzymy VertexArray
+            // Kluczowe s¹ 4 ostatnie argumenty: 
+            // tx, 0.0f -> sk¹d zacz¹æ wycinaæ z png
+            // TEXTURE_TILE_SIZE, TEXTURE_TILE_SIZE -> jak du¿y kawa³ek wyci¹æ (64x64)
             entity->addComponent("CVertexArray", std::make_shared<CVertexArray>(
-                "CVertexArray",      // const std::string& name
-                x * TILE_SIZE,       // float x
-                y * TILE_SIZE,       // float y
-                tx,                  // float tx
-                0.0f,                // float ty
-                TILE_SIZE,           // float width
-                TILE_SIZE,           // float height
-                "tileset"            // std::string textureID
+                "CVertexArray",
+                x * TILE_SIZE,       // Gdzie na ekranie (X)
+                y * TILE_SIZE,       // Gdzie na ekranie (Y)
+                tx,                  // Pozycja X na obrazku (0, 64 lub 128)
+                0.0f,                // Pozycja Y na obrazku (zawsze 0, bo masz jeden rz¹d)
+                TEXTURE_TILE_SIZE,   // Szerokoœæ wycinka (64)
+                TEXTURE_TILE_SIZE,   // Wysokoœæ wycinka (64)
+                "tileset"
             ));
         }
     }
@@ -180,81 +232,100 @@ void SceneTest::assembleMap() {
         }
     }
 }
+
 void SceneTest::sMovement(float dt) {
-    // 1. Pobieramy prêdkoœæ z configu (jeœli nazwa³eœ j¹ 'speed' w init)
-    // Jeœli m_playerSpeed jest nieustawione, u¿ywamy 200.0f jako zapas
-    float currentSpeed = (speed > 0.f) ? speed : 200.0f;
+    // Prêdkoœæ poruszania (piksele na sekundê)
+    float moveSpeed = (speed > 0.f) ? speed : 200.0f;
+    // Prêdkoœæ obrotu (stopnie na sekundê)
+    float rotationSpeed = 180.0f;
 
     for (auto& e : m_entityManager.getEntitiesByType("Player")) {
         auto& transform = e->getComponent<CTransform>("CTransform");
         auto& input = e->getComponent<CInput>("CInput");
 
-        // Resetujemy prêdkoœæ
+        // 1. Resetujemy prêdkoœæ (ale k¹t zostaje!)
         transform.velocity = { 0.f, 0.f };
 
-        // 2. Reagujemy na input (ustawiamy wektor prêdkoœci)
-        if (input.up)    transform.velocity.y = -currentSpeed;
-        if (input.down)  transform.velocity.y = currentSpeed;
-        if (input.left)  transform.velocity.x = -currentSpeed;
-        if (input.right) transform.velocity.x = currentSpeed;
+        // 2. Obs³uga obrotu (Lewo/Prawo)
+        if (input.left) {
+            transform.angle -= rotationSpeed * dt;
+        }
+        if (input.right) {
+            transform.angle += rotationSpeed * dt;
+        }
 
-        // 3. Aktualizujemy pozycjê logiczn¹ (CTransform)
-        transform.pos += transform.velocity * dt;
+        // 3. Obs³uga jazdy (Góra/Dó³)
+        float direction = 0.0f;
+        if (input.up)   direction = 1.0f;  // Do przodu
+        if (input.down) direction = -1.0f; // Do ty³u
 
-        // 4. Synchronizacja Grafiki (TO NAPRAWIA "BEZSENSOWNE MIEJSCE")
-        if (e->hasComponent("CSprite")) {
-            auto& spriteComp = e->getComponent<CSprite>("CSprite");
-            // Sprawdzamy czy wskaŸnik istnieje (SFML 3.0 unique_ptr)
-            if (spriteComp.sprite) {
-                // Przesuwamy obrazek tam, gdzie jest czo³g
-                spriteComp.sprite->setPosition(transform.pos);
+        if (direction != 0.0f) {
+            // Musimy zamieniæ k¹t (w stopniach) na radiany dla funkcji matematycznych
+            // W SFML i matematyce: 
+            // 0 stopni to zazwyczaj "Prawo" (oœ X). 
+            // Jeœli Twój sprite czo³gu w pliku PNG jest skierowany w GÓRÊ, musimy odj¹æ 90 stopni do obliczeñ.
+            // Zak³adam tutaj standard: 0 stopni = wektor w prawo.
 
-                // Opcjonalnie: Obracanie czo³gu w stronê jazdy
-                if (transform.velocity.y < 0) spriteComp.sprite->setRotation(sf::degrees(0));
-                if (transform.velocity.y > 0) spriteComp.sprite->setRotation(sf::degrees(180));
-                if (transform.velocity.x < 0) spriteComp.sprite->setRotation(sf::degrees(270));
-                if (transform.velocity.x > 0) spriteComp.sprite->setRotation(sf::degrees(90));
-            }
+            // Konwersja stopni na radiany: rad = deg * PI / 180
+            float radians = transform.angle * (3.14159265f / 180.0f);
+
+            // Obliczamy wektor przesuniêcia
+            // cos(k¹t) daje sk³adow¹ X, sin(k¹t) daje sk³adow¹ Y
+            transform.velocity.x = std::cos(radians) * moveSpeed * direction;
+            transform.velocity.y = std::sin(radians) * moveSpeed * direction;
         }
     }
 }
+
 void SceneTest::spawnPlayers() {
+    // Pobieramy teksturê raz
+    auto& tex = m_engine->assets().textures.getTexture("tank");
+    sf::Vector2u texSize = tex.getSize(); // Pobieramy rozmiar obrazka (np. 64x64)
+
     // --- GRACZ 1 (WSAD) ---
     auto p1 = m_entityManager.createEntity("Player");
 
-    // Pozycja: Lewy Górny Róg (1, 1)
     float startX1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
     float startY1 = 1 * TILE_SIZE + TILE_SIZE / 2.f;
 
     p1->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX1, startY1), sf::Vector2f(0.f, 0.f), 0.f));
 
-    // Wa¿ne: Kolizja jest nieco mniejsza ni¿ kafelek (np. 28x28 przy kafelku 32), ¿eby czo³g mieœci³ siê w korytarzach
-    p1->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE - 4.f, TILE_SIZE - 4.f)));
+    // UWAGA: Skoro zmniejszasz czo³g, zmniejsz te¿ jego kolizjê!
+    // Jeœli czo³g ma byæ ma³y, a kolizja du¿a (TILE_SIZE), bêdziesz zahacza³ o niewidzialne œciany.
+    // Tutaj ustawi³em kolizjê na po³owê rozmiaru kafelka (dostosuj to do swoich potrzeb).
+    p1->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE / 2.0f, TILE_SIZE / 2.0f)));
 
-    // Klawisze WSAD
     p1->addComponent("CInput", std::make_shared<CInput>(
         sf::Keyboard::Scancode::W, sf::Keyboard::Scancode::S,
         sf::Keyboard::Scancode::A, sf::Keyboard::Scancode::D,
         sf::Keyboard::Scancode::Space
     ));
 
-    auto& tex = m_engine->assets().textures.getTexture("tank");
     auto spriteComp1 = std::make_shared<CSprite>(tex);
-    spriteComp1->sprite->setColor(sf::Color::Red); // Kolorujemy czo³g
+
+    // 1. Ustawiamy œrodek obrotu/skalowania na œrodek obrazka
+    spriteComp1->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
+
+    // 2. Skalujemy na 50% (0.5f)
+    spriteComp1->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
+
+    // Opcjonalnie kolor
+    spriteComp1->sprite->setColor(sf::Color(255, 0, 0));
+
     p1->addComponent("CSprite", spriteComp1);
 
 
     // --- GRACZ 2 (Strza³ki) ---
     auto p2 = m_entityManager.createEntity("Player");
 
-    // Pozycja: Prawy Dolny Róg (GRID_WIDTH - 2, GRID_HEIGHT - 2)
     float startX2 = (GRID_WIDTH - 2) * TILE_SIZE + TILE_SIZE / 2.f;
     float startY2 = (GRID_HEIGHT - 2) * TILE_SIZE + TILE_SIZE / 2.f;
 
     p2->addComponent("CTransform", std::make_shared<CTransform>(sf::Vector2f(startX2, startY2), sf::Vector2f(0.f, 0.f), 0.f));
-    p2->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE - 4.f, TILE_SIZE - 4.f)));
 
-    // Klawisze Strza³ek
+    // Zmniejszona kolizja dla gracza 2
+    p2->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(TILE_SIZE / 2.0f, TILE_SIZE / 2.0f)));
+
     p2->addComponent("CInput", std::make_shared<CInput>(
         sf::Keyboard::Scancode::Up, sf::Keyboard::Scancode::Down,
         sf::Keyboard::Scancode::Left, sf::Keyboard::Scancode::Right,
@@ -262,11 +333,18 @@ void SceneTest::spawnPlayers() {
     ));
 
     auto spriteComp2 = std::make_shared<CSprite>(tex);
-    spriteComp2->sprite->setColor(sf::Color::Blue);
+
+    // To samo dla gracza 2
+    spriteComp2->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
+    spriteComp2->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
+
+    spriteComp2->sprite->setColor(sf::Color(65, 105, 225));
+
     p2->addComponent("CSprite", spriteComp2);
 
     m_entityManager.update();
 }
+
 void SceneTest::sProcessInput() {
     auto& window = m_engine->window();
 
@@ -293,5 +371,95 @@ void SceneTest::sProcessInput() {
         if (sf::Keyboard::isKeyPressed(input.kLeft))  input.left = true;
         if (sf::Keyboard::isKeyPressed(input.kRight)) input.right = true;
         if (sf::Keyboard::isKeyPressed(input.kShoot)) input.shoot = true;
+    }
+}
+
+// Pomocnicza funkcja (mo¿e byæ prywatn¹ metod¹ klasy), sprawdza czy pole jest solidne
+bool SceneTest::isSolid(int x, int y) {
+    // 1. Zabezpieczenie przed wyjœciem poza tablicê
+    if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) return true;
+
+    // 2. Pobierz typ kafelka z zapamiêtanej mapy
+    CTile::Type type = m_gridMap[x + y * GRID_WIDTH];
+
+    // 3. Zwróæ true jeœli to œciana lub granica
+    return (type == CTile::Type::WALL || type == CTile::Type::MAP_BORDER);
+}
+
+void SceneTest::sCollision(float dt) {
+    for (auto& e : m_entityManager.getEntitiesByType("Player")) {
+        auto& transform = e->getComponent<CTransform>("CTransform");
+        auto& box = e->getComponent<CBoundingBox>("CBoundingBox");
+
+        // --- CZÊŒÆ FIZYCZNA (Tylko jeœli siê rusza) ---
+        if (transform.velocity.x != 0 || transform.velocity.y != 0) {
+
+            // Obliczamy przysz³¹ pozycjê
+            sf::Vector2f nextPos = transform.pos + transform.velocity * dt;
+
+            // --- ETAP 1: KOLIZJA PO OSI X ---
+            float nextX = transform.pos.x + transform.velocity.x * dt;
+            float left = nextX - box.halfSize.x;
+            float right = nextX + box.halfSize.x;
+            float top = transform.pos.y - box.halfSize.y;
+            float bottom = transform.pos.y + box.halfSize.y;
+
+            int gridLeft = static_cast<int>(left / TILE_SIZE);
+            int gridRight = static_cast<int>(right / TILE_SIZE);
+            int gridTop = static_cast<int>(top / TILE_SIZE);
+            int gridBottom = static_cast<int>(bottom / TILE_SIZE);
+
+            if (transform.velocity.x > 0) { // PRAWO
+                if (isSolid(gridRight, gridTop) || isSolid(gridRight, gridBottom)) {
+                    nextX = gridRight * TILE_SIZE - box.halfSize.x - 0.1f;
+                }
+            }
+            else if (transform.velocity.x < 0) { // LEWO
+                if (isSolid(gridLeft, gridTop) || isSolid(gridLeft, gridBottom)) {
+                    nextX = (gridLeft + 1) * TILE_SIZE + box.halfSize.x + 0.1f;
+                }
+            }
+            transform.pos.x = nextX; // Aplikujemy X
+
+            // --- ETAP 2: KOLIZJA PO OSI Y ---
+            float nextY = transform.pos.y + transform.velocity.y * dt;
+            // Odœwie¿amy X (bo ju¿ siê zmieni³)
+            left = transform.pos.x - box.halfSize.x;
+            right = transform.pos.x + box.halfSize.x;
+            top = nextY - box.halfSize.y;
+            bottom = nextY + box.halfSize.y;
+
+            gridLeft = static_cast<int>(left / TILE_SIZE);
+            gridRight = static_cast<int>(right / TILE_SIZE);
+            gridTop = static_cast<int>(top / TILE_SIZE);
+            gridBottom = static_cast<int>(bottom / TILE_SIZE);
+
+            if (transform.velocity.y > 0) { // DÓ£
+                if (isSolid(gridLeft, gridBottom) || isSolid(gridRight, gridBottom)) {
+                    nextY = gridBottom * TILE_SIZE - box.halfSize.y - 0.1f;
+                }
+            }
+            else if (transform.velocity.y < 0) { // GÓRA
+                if (isSolid(gridLeft, gridTop) || isSolid(gridRight, gridTop)) {
+                    nextY = (gridTop + 1) * TILE_SIZE + box.halfSize.y + 0.1f;
+                }
+            }
+            transform.pos.y = nextY; // Aplikujemy Y
+        }
+
+        // --- CZÊŒÆ GRAFICZNA (Zawsze!) ---
+        if (e->hasComponent("CSprite")) {
+            auto& spriteComp = e->getComponent<CSprite>("CSprite");
+            if (spriteComp.sprite) {
+                // Ustawiamy pozycjê
+                spriteComp.sprite->setPosition(transform.pos);
+
+                // NOWOŒÆ: Ustawiamy rotacjê
+                // Jeœli Twój obrazek w pliku .png jest skierowany w GÓRÊ, a matematyka zak³ada 0 stopni = PRAWO,
+                // to musisz dodaæ +90 stopni do rotacji sprite'a, ¿eby siê zgadza³o.
+                // Spróbuj: transform.angle LUB transform.angle + 90.0f
+                spriteComp.sprite->setRotation(sf::degrees(transform.angle + 90.0f));
+            }
+        }
     }
 }

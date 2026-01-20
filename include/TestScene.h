@@ -23,6 +23,8 @@ public:
     SceneTest(GameEngine* engine);
 
     void sProcessInput() override;
+    bool isSolid(int x, int y);
+    void sCollision(float dt);
     void sUpdate(float dt) override;
     void sRender() override;
 
@@ -36,7 +38,7 @@ private:
     std::future<std::vector<CTile::Type>> m_futureMapData;
     bool m_isGenerating = false;
     float m_loadingRotation = 0.0f;
-
+    std::vector<CTile::Type> m_gridMap;
 
 
     // Konfiguracja mapy

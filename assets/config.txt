@@ -1,11 +1,11 @@
 # Ustawienia Okna
-WindowWidth 1280
-WindowHeight 720
+WindowWidth 1344
+WindowHeight 1344
 
 # Ustawienia Mapy
-TileSize 32
-GridWidth 25
-GridHeight 25
+TileSize 64
+GridWidth 20
+GridHeight 20
 
 # Ustawienia Gracza
 PlayerSpeed 200.0
