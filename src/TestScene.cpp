@@ -1,6 +1,7 @@
 #include "TestScene.h"
 #include "GameEngine.h"
 #include <iostream>
+#include <optional>
 
 SceneTest::SceneTest(GameEngine* engine) : Scene(engine) {
     init();
@@ -40,6 +41,8 @@ void SceneTest::init() {
     m_engine->assets().textures.loadTexture("tileset", "assets/graphics/tileset.png");
     m_engine->assets().textures.loadTexture("ball", "assets/graphics/ball.png");
     m_tilesetTexture = m_engine->assets().textures.getTexture("tileset");
+
+    setupScoreText();
 
     startAsyncGeneration();
 }
@@ -85,34 +88,36 @@ void SceneTest::sUpdate(float dt) {
 void SceneTest::sRender() {
     auto& window = m_engine->window();
 
-    // 1. Rysowanie mapy (t³o)
+    // 1. T£O (MAPA)
     if (m_masterVertexArray.getVertexCount() > 0) {
         window.draw(m_masterVertexArray, &m_tilesetTexture);
     }
 
-    // 2. Rysowanie Graczy
+    // --- POPRAWKA: Rysowanie optionala ---
+    if (!m_isGenerating) {
+        // Musimy sprawdziæ czy tekst istnieje (has_value) i go wy³uskaæ (*)
+        if (m_textScoreP1.has_value()) window.draw(*m_textScoreP1);
+        if (m_textScoreP2.has_value()) window.draw(*m_textScoreP2);
+        if (m_textW.has_value()) window.draw(*m_textW);
+    }
+
+    // 3. GRACZE (Nad wynikiem)
     for (auto& e : m_entityManager.getEntitiesByType("Player")) {
         if (e->hasComponent("CSprite")) {
             auto& comp = e->getComponent<CSprite>("CSprite");
-            if (comp.sprite) {
-                window.draw(*comp.sprite);
-            }
+            if (comp.sprite) window.draw(*comp.sprite);
         }
     }
 
-    // --- NOWOŒÆ: Rysowanie Kulek ---
+    // 4. KULE
     for (auto& e : m_entityManager.getEntitiesByType("Bullet")) {
         if (e->hasComponent("CSprite")) {
-            // Pamiêtaj o kropce zamiast strza³ki przy getComponent!
             auto& comp = e->getComponent<CSprite>("CSprite");
-            if (comp.sprite) {
-                window.draw(*comp.sprite);
-            }
+            if (comp.sprite) window.draw(*comp.sprite);
         }
     }
-    // -------------------------------
 
-    // 3. Rysowanie loadera (na samym wierzchu)
+    // 5. Rysowanie loadera (na samym wierzchu)
     if (m_isGenerating) {
         sf::RectangleShape loader({ 60.f, 60.f });
         loader.setOrigin({ 30.f, 30.f });
@@ -190,6 +195,9 @@ std::vector<CTile::Type> SceneTest::generateMazeData(int width, int height) {
             }
         }
     }
+
+    this->m_scoreP1 = 0; m_textScoreP1->setString("0");
+    this->m_scoreP2 = 0; m_textScoreP2->setString("0");
 
     return mapData;
 }
@@ -299,6 +307,7 @@ void SceneTest::spawnPlayers() {
 
     // --- GRACZ 1 ---
     auto p1 = m_entityManager.createEntity("Player");
+    m_player1 = p1;
     // ... (Twoja konfiguracja Transform, BoundingBox, Input, Sprite bez zmian) ...
 
     // START KOPIOWANIA (Reszta bez zmian)
@@ -326,6 +335,7 @@ void SceneTest::spawnPlayers() {
 
     // --- GRACZ 2 ---
     auto p2 = m_entityManager.createEntity("Player");
+    m_player2 = p2;
     // ... (Transform, BoundingBox, Input bez zmian) ...
 
     float startX2 = (GRID_WIDTH - 2) * TILE_SIZE + TILE_SIZE / 2.f;
@@ -470,46 +480,52 @@ void SceneTest::sCollision(float dt) {
     }
 }
 
-void SceneTest::spawnBullet(std::shared_ptr<Entity> shooter) {
+bool SceneTest::spawnBullet(std::shared_ptr<Entity> shooter) {
     auto& shooterTransform = shooter->getComponent<CTransform>("CTransform");
 
-    // Tworzymy kulê
+    // 1. Obliczamy pozycjê startow¹ (tak jak wczeœniej)
+    float bulletSpeed = 600.0f;
+    float radians = shooterTransform.angle * (3.14159265f / 180.0f);
+
+    // Offset (wylot lufy)
+    float offsetDist = 40.0f;
+    sf::Vector2f offset(std::cos(radians) * offsetDist, std::sin(radians) * offsetDist);
+    sf::Vector2f spawnPos = shooterTransform.pos + offset;
+
+    // --- NOWOŒÆ: SPRAWDZENIE CZY LUFA NIE JEST W ŒCIANIE ---
+    int gx = static_cast<int>(spawnPos.x / TILE_SIZE);
+    int gy = static_cast<int>(spawnPos.y / TILE_SIZE);
+
+    if (isSolid(gx, gy)) {
+        std::cout << "Lufa zablokowana przez sciane! Nie mozna strzelic." << std::endl;
+        return false; // PRZERYWAMY STRZA£
+    }
+    // -------------------------------------------------------
+
+    // Jeœli jest wolne, tworzymy kulê normalnie...
     auto bullet = m_entityManager.createEntity("Bullet");
     bullet->addComponent("CBullet", std::make_shared<CBullet>());
 
-    // 1. Obliczamy pozycjê i prêdkoœæ
-    float bulletSpeed = 600.0f; // Szybkoœæ kuli
-
-    // Konwersja k¹ta gracza na radiany
-    float radians = shooterTransform.angle * (3.14159265f / 180.0f);
-
-    // Wektor prêdkoœci (taki sam jak kierunek patrzenia czo³gu)
     sf::Vector2f velocity(std::cos(radians) * bulletSpeed, std::sin(radians) * bulletSpeed);
 
-    // Transform: Pozycja startowa to pozycja czo³gu, K¹t ten sam co czo³g
-    bullet->addComponent("CTransform", std::make_shared<CTransform>(shooterTransform.pos, velocity, shooterTransform.angle));
-
-    // BoundingBox dla kuli (ma³a, np. 10x10)
+    bullet->addComponent("CTransform", std::make_shared<CTransform>(spawnPos, velocity, shooterTransform.angle));
     bullet->addComponent("CBoundingBox", std::make_shared<CBoundingBox>(sf::Vector2f(10.f, 10.f)));
 
-    // Sprite
     auto& tex = m_engine->assets().textures.getTexture("ball");
     auto spriteComp = std::make_shared<CSprite>(tex);
-
-    // Ustawiamy origin na œrodek kulki
     sf::Vector2u texSize = tex.getSize();
     spriteComp->sprite->setOrigin(sf::Vector2f(texSize.x / 2.f, texSize.y / 2.f));
-    // Skalujemy, jeœli kulka jest za du¿a
     spriteComp->sprite->setScale(sf::Vector2f(0.5f, 0.5f));
 
     bullet->addComponent("CSprite", spriteComp);
+
+    return true; // Sukces!
 }
 
 void SceneTest::sWeapon(float dt) {
-    // 1. Logika strzelania (BEZ ZMIAN - skopiowane z poprzedniej wersji)
+    // 1. Logika strzelania (BEZ ZMIAN)
     for (auto& e : m_entityManager.getEntitiesByType("Player")) {
         if (!e->hasComponent("CBurstWeapon") || !e->hasComponent("CInput")) continue;
-
         auto& weapon = e->getComponent<CBurstWeapon>("CBurstWeapon");
         auto& input = e->getComponent<CInput>("CInput");
 
@@ -518,89 +534,178 @@ void SceneTest::sWeapon(float dt) {
         if (weapon.burstCooldown > 0) {
             weapon.burstCooldown -= dt;
             if (weapon.burstCooldown <= 0) {
-                weapon.shotsFired = 0;
-                weapon.burstCooldown = 0;
+                weapon.shotsFired = 0; weapon.burstCooldown = 0;
                 std::cout << "PRZELADOWANO! Gotowy do strzalu." << std::endl;
             }
         }
         else if (input.shoot && weapon.shotsFired < weapon.maxShots && weapon.timeSinceLastShot >= weapon.fireRate) {
-            spawnBullet(e);
-            weapon.shotsFired++;
-            weapon.timeSinceLastShot = 0.f;
 
-            // Opcjonalnie: Logowanie
-            // int bulletsLeft = weapon.maxShots - weapon.shotsFired;
-            // std::cout << "Strzal! Zostalo kul: " << bulletsLeft << std::endl;
+            // --- NOWOŒÆ: Próbujemy strzeliæ ---
+            bool shotSuccess = spawnBullet(e);
 
-            if (weapon.shotsFired >= weapon.maxShots) {
-                weapon.burstCooldown = weapon.burstDelay;
-                std::cout << "Pusty magazynek! Przeladowywanie (5s)..." << std::endl;
+            if (shotSuccess) {
+                // Wykonujemy logikê TYLKO jeœli kula faktycznie powsta³a
+                weapon.shotsFired++;
+                weapon.timeSinceLastShot = 0.f;
+
+                if (weapon.shotsFired >= weapon.maxShots) {
+                    weapon.burstCooldown = weapon.burstDelay;
+                    std::cout << "Pusty magazynek! Przeladowywanie..." << std::endl;
+                }
             }
+            // Jeœli shotSuccess == false, nic nie robimy (gracz musi odjechaæ od œciany)
         }
     }
 
-    // 2. NOWA LOGIKA RUCHU I ODBIJANIA POCISKÓW
-    for (auto& e : m_entityManager.getEntitiesByType("Bullet")) {
-        auto& transform = e->getComponent<CTransform>("CTransform");
-        auto& bullet = e->getComponent<CBullet>("CBullet");
+    // 2. LOGIKA KULI (Rykoszety + Trafienia w czo³g)
+    auto& players = m_entityManager.getEntitiesByType("Player"); // Pobieramy listê graczy raz
 
-        // A. Odliczanie czasu ¿ycia
+    for (auto& b : m_entityManager.getEntitiesByType("Bullet")) {
+        auto& bTransform = b->getComponent<CTransform>("CTransform");
+        auto& bBox = b->getComponent<CBoundingBox>("CBoundingBox");
+        auto& bullet = b->getComponent<CBullet>("CBullet");
+
+        // A. Czas ¿ycia
         bullet.lifetime -= dt;
-        if (bullet.lifetime <= 0) {
-            std::cout << "Kula zniknela ze starosci." << std::endl;
-            e->destroy();
-            continue; // Nie ma sensu liczyæ fizyki dla martwej kuli
+        if (bullet.lifetime <= 0) { b->destroy(); continue; }
+
+        // B. Sprawdzanie kolizji z GRACZAMI (Trafienie = Œmieræ)
+        for (auto& p : players) {
+            auto& pTransform = p->getComponent<CTransform>("CTransform");
+            auto& pBox = p->getComponent<CBoundingBox>("CBoundingBox");
+
+            // Prosta kolizja AABB (Prostok¹t - Prostok¹t)
+            // Obliczamy ró¿nicê pozycji (bierzemy wartoœæ bezwzglêdn¹ abs)
+            float dx = std::abs(bTransform.pos.x - pTransform.pos.x);
+            float dy = std::abs(bTransform.pos.y - pTransform.pos.y);
+
+            // Sprawdzamy czy odleg³oœæ jest mniejsza ni¿ suma po³ówek szerokoœci/wysokoœci
+            float w = bBox.halfSize.x + pBox.halfSize.x;
+            float h = bBox.halfSize.y + pBox.halfSize.y;
+
+            if (dx < w && dy < h) {
+                // KOLIZJA!
+                std::cout << "TRAFIENIE! Czolg zniszczony!" << std::endl;
+
+                // --- NOWA LOGIKA PUNKTACJI ---
+                // Jeœli zgin¹³ Gracz 1 -> Punkt dla Gracza 2
+                if (m_player1 && p->id() == m_player1->id()) {
+                    m_scoreP2++;
+                    // Zmiana na strza³kê ->
+                    m_textScoreP2->setString(std::to_string(m_scoreP2));
+                }
+                // Jeœli zgin¹³ Gracz 2 -> Punkt dla Gracza 1
+                else if (m_player2 && p->id() == m_player2->id()) {
+                    m_scoreP1++;
+                    // Zmiana na strza³kê ->
+                    m_textScoreP1->setString(std::to_string(m_scoreP1));
+                }
+
+                // Centrujemy tekst ponownie (SFML 3.0 fix)
+                sf::FloatRect b1 = m_textScoreP1->getLocalBounds();
+                m_textScoreP1->setOrigin(sf::Vector2f(b1.size.x / 2.f, b1.size.y / 2.f)); // size.x
+
+                sf::FloatRect b2 = m_textScoreP2->getLocalBounds();
+                m_textScoreP2->setOrigin(sf::Vector2f(b2.size.x / 2.f, b2.size.y / 2.f)); // size.x
+                // -----------------------------
+
+                // Niszczymy kulê
+                b->destroy();
+
+                // Respawn czo³gu (ofiary)
+                pTransform.pos = pTransform.homePos;
+                pTransform.velocity = { 0.f, 0.f };
+                pTransform.angle = 0.f;
+
+                // Reset broni
+                if (p->hasComponent("CBurstWeapon")) {
+                    auto& wpn = p->getComponent<CBurstWeapon>("CBurstWeapon");
+                    wpn.shotsFired = 0;
+                    wpn.burstCooldown = 0;
+                }
+
+                break;
+            }
         }
 
-        // B. Fizyka Odbiæ (Rykoszet)
-        // Musimy sprawdziæ oœ X i oœ Y osobno, ¿eby wiedzieæ, od której œciany siê odbiliœmy.
+        // Jeœli kula zosta³a zniszczona na czo³gu, nie licz dla niej odbiæ
+        if (!b->isAlive()) continue;
 
-        // --- Sprawdzanie osi X ---
-        float nextX = transform.pos.x + transform.velocity.x * dt;
+
+        // C. Fizyka Odbiæ (Œciany) - BEZ ZMIAN WZGLÊDEM POPRZEDNIEJ WERSJI
+        float nextX = bTransform.pos.x + bTransform.velocity.x * dt;
         int gx = static_cast<int>(nextX / TILE_SIZE);
-        int gy = static_cast<int>(transform.pos.y / TILE_SIZE); // Y siê jeszcze nie zmieni³
+        int gy = static_cast<int>(bTransform.pos.y / TILE_SIZE);
 
-        // Jeœli nastêpny krok w X wchodzi w œcianê...
-        if (isSolid(gx, gy)) {
-            // ...to ODBIJAMY SIÊ (odwracamy prêdkoœæ X)
-            transform.velocity.x *= -1.0f;
-        }
-        else {
-            // ...w przeciwnym razie przesuwamy siê normalnie
-            transform.pos.x = nextX;
-        }
+        if (isSolid(gx, gy)) bTransform.velocity.x *= -1.0f;
+        else bTransform.pos.x = nextX;
 
-        // --- Sprawdzanie osi Y ---
-        float nextY = transform.pos.y + transform.velocity.y * dt;
-        gx = static_cast<int>(transform.pos.x / TILE_SIZE); // X jest ju¿ zaktualizowany
+        float nextY = bTransform.pos.y + bTransform.velocity.y * dt;
+        gx = static_cast<int>(bTransform.pos.x / TILE_SIZE);
         gy = static_cast<int>(nextY / TILE_SIZE);
 
-        // Jeœli nastêpny krok w Y wchodzi w œcianê...
-        if (isSolid(gx, gy)) {
-            // ...to ODBIJAMY SIÊ (odwracamy prêdkoœæ Y)
-            transform.velocity.y *= -1.0f;
-        }
-        else {
-            transform.pos.y = nextY;
-        }
+        if (isSolid(gx, gy)) bTransform.velocity.y *= -1.0f;
+        else bTransform.pos.y = nextY;
 
-        // C. Aktualizacja k¹ta obrotu (Grafika)
-        // Skoro kula mog³a zmieniæ kierunek lotu, musimy zaktualizowaæ jej k¹t (transform.angle),
-        // ¿eby Sprite obróci³ siê w stronê nowego lotu.
+        // Aktualizacja k¹ta i Sprite'a
+        float angleRad = std::atan2(bTransform.velocity.y, bTransform.velocity.x);
+        bTransform.angle = angleRad * (180.0f / 3.14159265f);
 
-        // atan2 zwraca k¹t w radianach na podstawie wektora (y, x)
-        float angleRad = std::atan2(transform.velocity.y, transform.velocity.x);
-        transform.angle = angleRad * (180.0f / 3.14159265f); // Zamiana na stopnie
-
-
-        // D. Synchronizacja Sprite'a
-        if (e->hasComponent("CSprite")) {
-            auto& spriteComp = e->getComponent<CSprite>("CSprite");
+        if (b->hasComponent("CSprite")) {
+            auto& spriteComp = b->getComponent<CSprite>("CSprite");
             if (spriteComp.sprite) {
-                spriteComp.sprite->setPosition(transform.pos);
-                // +90 stopni korekty, bo Twoja tekstura pewnie patrzy w górê, a matematyka zak³ada w prawo
-                spriteComp.sprite->setRotation(sf::degrees(transform.angle + 90.0f));
+                spriteComp.sprite->setPosition(bTransform.pos);
+                spriteComp.sprite->setRotation(sf::degrees(bTransform.angle + 90.0f));
             }
         }
     }
+}
+
+void SceneTest::setupScoreText() {
+    // Sprawdzamy czy AssetManager ma czcionkê
+    // (Zak³adam, ¿e Twoja klasa FontManager zwraca referencjê, wiêc to zadzia³a)
+    const auto& font = m_engine->assets().fonts.getFont("main");
+
+    // DIAGNOSTYKA: Wypisz info w konsoli (sf::Font::Info dostêpne w SFML)
+    // Jeœli czcionka jest pusta, rodzina (family) bêdzie pusta.
+    std::cout << "[DEBUG] Konfiguracja tekstu..." << std::endl;
+
+    // Tworzymy teksty
+    m_textScoreP1.emplace(font);
+    m_textScoreP1->setString("0");
+    m_textScoreP1->setCharacterSize(100);
+    // ZMIANA: Pe³na widocznoœæ (255), ¿eby wykluczyæ, ¿e jest za blady
+    m_textScoreP1->setFillColor(sf::Color(255, 0, 0, 125));
+
+    m_textScoreP2.emplace(font);
+    m_textScoreP2->setString("0");
+    m_textScoreP2->setCharacterSize(100);
+    // ZMIANA: Pe³na widocznoœæ (255)
+    m_textScoreP2->setFillColor(sf::Color(65, 105, 225, 125));
+
+    float centerX = (GRID_WIDTH * TILE_SIZE) / 2.0f;
+    float centerY = (GRID_HEIGHT * TILE_SIZE) / 2.0f;
+
+    // Pozycjonowanie
+    sf::FloatRect bounds1 = m_textScoreP1->getLocalBounds();
+    m_textScoreP1->setOrigin(sf::Vector2f(bounds1.size.x / 2.f, bounds1.size.y / 2.f));
+    m_textScoreP1->setPosition(sf::Vector2f(centerX - 60.f, centerY - 35.f));
+
+    sf::FloatRect bounds2 = m_textScoreP2->getLocalBounds();
+    m_textScoreP2->setOrigin(sf::Vector2f(bounds2.size.x / 2.f, bounds2.size.y / 2.f));
+    m_textScoreP2->setPosition(sf::Vector2f(centerX + 60.f, centerY - 35.f));
+
+    // Tworzymy teksty
+    m_textW.emplace(font);
+    m_textW->setString("graj na wieczko.pl");
+    m_textW->setCharacterSize(50);
+    // ZMIANA: Pe³na widocznoœæ (255), ¿eby wykluczyæ, ¿e jest za blady
+    m_textW->setFillColor(sf::Color(0, 0, 0, 125));
+    
+    // Pozycjonowanie
+    sf::FloatRect bounds3 = m_textW->getLocalBounds();
+    m_textW->setOrigin(sf::Vector2f(bounds3.size.x / 2.f, bounds3.size.y / 2.f));
+    m_textW->setPosition(sf::Vector2f(centerX, centerY - 115.f));
+
+    std::cout << "[DEBUG] Tekst skonfigurowany. Pozycja srodka: " << centerX << ", " << centerY << std::endl;
 }

@@ -21,7 +21,7 @@ public:
         config.loadFromFile("assets/config.txt");
         textures.loadTexture("tank", "assets/graphics/tank.png");
         textures.loadTexture("tileset", "assets/graphics/tileset.png");
-        fonts.loadFont("main", "assets/fonts/font.ttf");
+        fonts.loadFont("main", "assets/fonts/font.otf");
         // i inne
     }
 };

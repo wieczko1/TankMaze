@@ -28,7 +28,7 @@ public:
     void sUpdate(float dt) override;
     void sRender() override;
     void sWeapon(float dt);
-    void spawnBullet(std::shared_ptr<Entity> shooter);
+    bool spawnBullet(std::shared_ptr<Entity> shooter);
 
 private:
     // Podstawowe systemy ECS i renderowania
@@ -42,6 +42,19 @@ private:
     float m_loadingRotation = 0.0f;
     std::vector<CTile::Type> m_gridMap;
 
+    // --- NOWE ZMIENNE DO WYNIKÓW ---
+    int m_scoreP1 = 0;
+    int m_scoreP2 = 0;
+
+    std::optional<sf::Text> m_textScoreP1;
+    std::optional<sf::Text> m_textScoreP2;
+    std::optional<sf::Text> m_textW;
+
+    // WskaŸniki na graczy (¿eby identyfikowaæ ich przy trafieniu)
+    std::shared_ptr<Entity> m_player1;
+    std::shared_ptr<Entity> m_player2;
+
+    void setupScoreText(); // Funkcja konfiguruj¹ca wygl¹d tekstu
 
     // Konfiguracja mapy
     int GRID_WIDTH;

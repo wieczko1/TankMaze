@@ -94,15 +94,19 @@ private:
     sf::VertexArray m_vertices{ sf::PrimitiveType::Triangles, 6 };
     std::string textureID;
 };
+
 class CTransform : public Component {
 public:
     sf::Vector2f pos = { 0.f, 0.f };
     sf::Vector2f velocity = { 0.f, 0.f };
     float angle = 0.f;
 
-    // Poprawka: Dodano : Component("Transform")
+    // NOWOŒÆ: Pozycja startowa (do respawnu)
+    sf::Vector2f homePos = { 0.f, 0.f };
+
     CTransform(const sf::Vector2f& p, const sf::Vector2f& v, float a)
-        : Component("Transform"), pos(p), velocity(v), angle(a) {}
+        : Component("Transform"), pos(p), velocity(v), angle(a), homePos(p) {
+    } // Przypisujemy p do homePos
 };
 
 class CSprite : public Component {
