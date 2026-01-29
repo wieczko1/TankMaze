@@ -1,13 +1,11 @@
 #include "GameEngine.h"
 #include <iostream>
 
-// 1. Constructor
 GameEngine::GameEngine()
 {
     init();
 } 
 
-// 2. The Run Loop
 void GameEngine::run()
 {
     while (m_running && m_window.isOpen())
@@ -18,7 +16,6 @@ void GameEngine::run()
     }
 }
 
-// 3. Initialize the Window
 void GameEngine::init()
 {
     m_assets.loadAll();
@@ -29,7 +26,6 @@ void GameEngine::init()
     m_assets.loadAll();
 }
 
-// 4. Input Processing
 void GameEngine::processInput()
 {
     if (m_currentScene)
@@ -38,7 +34,6 @@ void GameEngine::processInput()
     }
 }
 
-// 5. Update Game Logic
 void GameEngine::update()
 {
     if (m_currentScene)
@@ -47,7 +42,6 @@ void GameEngine::update()
     }
 }
 
-// 6. Render
 void GameEngine::render()
 {
     m_window.clear();
@@ -60,7 +54,6 @@ void GameEngine::render()
     m_window.display();
 }
 
-// 7. Change Scene
 void GameEngine::changeScene(const std::string& name, std::shared_ptr<Scene> scene, bool endCurrent)
 {
     m_scenes[name] = scene;
