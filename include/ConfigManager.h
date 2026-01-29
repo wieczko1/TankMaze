@@ -19,7 +19,6 @@ public:
 
         std::string line;
         while (std::getline(file, line)) {
-            // Ignoruj puste linie i komentarze zaczynajace sie od #
             if (line.empty() || line[0] == '#') continue;
 
             std::stringstream ss(line);
