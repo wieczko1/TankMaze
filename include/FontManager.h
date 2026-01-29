@@ -11,7 +11,7 @@ private:
 public:
     void loadFont(const std::string& name, const std::string& path) {
         sf::Font font;
-        if (!font.openFromFile(path)) { // W SFML 3.0 u¿ywamy openFromFile lub loadFromFile
+        if (!font.openFromFile(path)) {
             std::cerr << "Blad: Nie mozna zaladowac czcionki: " << path << std::endl;
             return;
         }
@@ -24,7 +24,6 @@ public:
         if (it != m_fonts.end()) {
             return it->second;
         }
-        // W razie braku, SFML 3.0 mo¿e rzuciæ wyj¹tek lub zwróciæ pust¹ czcionkê
         std::cerr << "Blad: Brak czcionki o nazwie: " << name << std::endl;
         static sf::Font placeholder;
         return placeholder;
