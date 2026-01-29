@@ -15,8 +15,6 @@ void TileMapManager::loadMap(const std::vector<std::string>& levelData) {
     sf::Texture& tex = m_texMgr.getTexture("wall");
     sf::Vector2u texSize = tex.getSize();
 
-    // W SFML 3.0 wspó³rzêdne tekstury mog¹ byæ znormalizowane lub w pikselach.
-    // Domyœlnie s¹ to piksele.
     float tw = static_cast<float>(texSize.x);
     float th = static_cast<float>(texSize.y);
 
@@ -28,16 +26,13 @@ void TileMapManager::loadMap(const std::vector<std::string>& levelData) {
 
                 m_wallBounds.push_back(sf::FloatRect({ xPos, yPos }, { m_tileSize, m_tileSize }));
 
-                // Tworzymy pomocniczy wierzcho³ek
                 sf::Vertex v;
-                v.color = sf::Color::White; // Dobra praktyka w SFML 3.0
+                v.color = sf::Color::White;
 
-                // TRÓJK¥T 1
                 v.position = { xPos, yPos }; v.texCoords = { 0.f, 0.f }; m_vertices.append(v);
                 v.position = { xPos + m_tileSize, yPos }; v.texCoords = { tw, 0.f }; m_vertices.append(v);
                 v.position = { xPos, yPos + m_tileSize }; v.texCoords = { 0.f, th }; m_vertices.append(v);
 
-                // TRÓJK¥T 2
                 v.position = { xPos + m_tileSize, yPos }; v.texCoords = { tw, 0.f }; m_vertices.append(v);
                 v.position = { xPos + m_tileSize, yPos + m_tileSize }; v.texCoords = { tw, th }; m_vertices.append(v);
                 v.position = { xPos, yPos + m_tileSize }; v.texCoords = { 0.f, th }; m_vertices.append(v);
@@ -47,7 +42,6 @@ void TileMapManager::loadMap(const std::vector<std::string>& levelData) {
 }
 
 void TileMapManager::draw(sf::RenderWindow& window) {
-    // Przy rysowaniu VertexArray MUSISZ podaæ teksturê
     window.draw(m_vertices, &m_texMgr.getTexture("wall"));
 }
 
